@@ -46,6 +46,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -62,6 +64,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
+val LocalTextColor = androidx.compose.runtime.staticCompositionLocalOf { androidx.compose.ui.graphics.Color.White }
+val LocalCardBgColor = androidx.compose.runtime.staticCompositionLocalOf { androidx.compose.ui.graphics.Color(0xFF1A1A1A) }
+val LocalIconBgColor = androidx.compose.runtime.staticCompositionLocalOf { androidx.compose.ui.graphics.Color(0xFF2A2A2A) }
+
 enum class SubNavType { Push, Pop, Instant }
 
 @Composable
@@ -74,8 +80,16 @@ fun SettingsScreen(
     onBack:              () -> Unit,
     onSelectWeather:     (WeatherType) -> Unit = {}
 ) {
-    val bgColor = Color(0xFF0D0D0D)
-    val cardBgColor = Color(0xFF1A1A1A)
+    val isSystemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDark = when(settings.theme) {
+        AppTheme.Light -> false
+        AppTheme.Dark -> true
+        AppTheme.Auto -> isSystemDark
+    }
+    val bgColor = if(isDark) Color(0xFF0D0D0D) else Color(0xFFF2F2F7)
+    val cardBgColor = if(isDark) Color(0xFF1A1A1A) else Color.White
+    val iconBgColor = if(isDark) Color(0xFF2A2A2A) else Color(0xFFE5E5EA)
+    val textColor = if(isDark) Color.White else Color.Black
     var navType by remember { mutableStateOf(SubNavType.Push) }
 
     var displayedTitle by remember { mutableStateOf(
@@ -139,7 +153,7 @@ fun SettingsScreen(
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(cardBgColor)
                                 .padding(horizontal = 20.dp, vertical = 16.dp)
-                        ) { Text("Find some settings...", color = Color.White.copy(alpha = 0.4f), fontSize = 16.sp) }
+                        ) { Text("Find some settings...", color = textColor.copy(alpha = 0.4f), fontSize = 16.sp) }
                     }
                     
                     item {
@@ -161,7 +175,7 @@ fun SettingsScreen(
                             SettingsItemOverlay("Notifications", "notification settings", Icons.Outlined.Notifications) {}
                             SettingsItemOverlay("Widgets", "widgets settings", Icons.Outlined.Widgets) {}
                             SettingsItemOverlay("Provider selector", "OpenWeather, BMKG, or Google", Icons.Outlined.CloudQueue) { onOpenOverlay(OverlayType.Provider) }
-                            SettingsItemOverlay("Set your own API Keys", "if you prefer to not use our own api keys", Icons.Outlined.VpnKey) {}
+                            SettingsItemOverlay("Set your own API Keys", "if you prefer to not use our own api keys", Icons.Outlined.VpnKey) { onOpenOverlay(OverlayType.ApiKeys) }
                             SettingsItemOverlay("Debug Menus", "well.. debug menus", Icons.Outlined.BugReport) { navType = SubNavType.Push; onMenuChange("DebugMenu") }
                             SettingsItemOverlay("Language", "english", Icons.Outlined.Translate) {}
                             SettingsItemOverlay("Credits", "made by roo, with <3", Icons.Outlined.Info) { onOpenOverlay(OverlayType.Credits) }
@@ -204,18 +218,18 @@ fun SettingsScreen(
                                     .padding(horizontal = 20.dp, vertical = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
-                                    Icon(Icons.Outlined.Shuffle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.Shuffle, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
                                 }
                                 Spacer(modifier = Modifier.width(16.dp))
-                                Text("Cycle Random Weather", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Text("Cycle Random Weather", color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                             }
                             SettingsSwitch("Enable Clouds", "Volumetric procedural cloud layer", Icons.Outlined.FilterDrama, settings.enableClouds) { onUpdateSettings(settings.copy(enableClouds = it)) }
                             SettingsSwitch("Rotate Wind Arrow", "Continously rotate the arrow on wind speed", Icons.AutoMirrored.Outlined.RotateRight, settings.debugRotateWindSpeed) { onUpdateSettings(settings.copy(debugRotateWindSpeed = it)) }
                         }
                     }
                     
-                    item { Text("Force Weather State", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) }
+                    item { Text("Force Weather State", color = textColor.copy(alpha = 0.5f), fontSize = 14.sp) }
                     
                     item {
                         SettingsGroup {
@@ -251,6 +265,11 @@ fun SettingsScreen(
     val titleX = (maxTitleX * headerProgress).dp
     val titleY = (44f * (1f - headerProgress) - 8f * headerProgress).dp
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalTextColor provides textColor,
+        LocalCardBgColor provides cardBgColor,
+        LocalIconBgColor provides iconBgColor
+    ) {
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
         val internalGlassState = remember { GlassState() }
 
@@ -297,7 +316,7 @@ fun SettingsScreen(
                     Box(modifier = Modifier.matchParentSize().padding(top = 56.dp, start = 24.dp, end = 24.dp)) {
                         Text(
                             text = when(swipeBgMenu) { "General" -> "General"; "Appearance" -> "Appearance"; "DebugMenu" -> "Debug Menus"; else -> "Settings" },
-                            color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            color = textColor, fontSize = 40.sp, fontWeight = FontWeight.Bold,
                             modifier = Modifier.graphicsLayer {
                                 translationX = bgTitleX.toPx(); translationY = bgTitleY.toPx()
                                 scaleX = bgTitleScale; scaleY = bgTitleScale
@@ -422,11 +441,11 @@ fun SettingsScreen(
                             modifier = Modifier
                                 .size(32.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.1f))
+                                .background(textColor.copy(alpha = 0.1f))
                                 .clickable { handleBack(SubNavType.Pop) },
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = textColor, modifier = Modifier.size(24.dp))
                         }
                     }
 
@@ -452,7 +471,7 @@ fun SettingsScreen(
                         ) { title ->
                             Text(
                                 text = title,
-                                color = Color.White,
+                                color = textColor,
                                 fontSize = 40.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -462,15 +481,19 @@ fun SettingsScreen(
             }
         }
     }
+    }
 }
 
 @Composable
 fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xFF1A1A1A))
+            .background(cardBgColor)
             .padding(vertical = 8.dp)
     ) {
         content()
@@ -478,7 +501,11 @@ fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint: Color = Color.White, onClick: () -> Unit) {
+fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint: Color = Color.Unspecified, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
+    val actualTint = if (tint == Color.Unspecified) textColor else tint
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -486,15 +513,15 @@ fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = actualTint, modifier = Modifier.size(18.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             if (subtitle.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(subtitle, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+                Text(subtitle, color = textColor.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
     }
@@ -502,6 +529,9 @@ fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint
 
 @Composable
 fun SettingsSwitch(title: String, subtitle: String, icon: ImageVector, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -510,58 +540,64 @@ fun SettingsSwitch(title: String, subtitle: String, icon: ImageVector, checked: 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.padding(end = 16.dp)) {
-                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 if (subtitle.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(subtitle, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, lineHeight = 16.sp)
+                    Text(subtitle, color = textColor.copy(alpha = 0.5f), fontSize = 12.sp, lineHeight = 16.sp)
                 }
             }
         }
         Switch(
             checked = checked, onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color.DarkGray)
+            colors = SwitchDefaults.colors(checkedThumbColor = textColor, checkedTrackColor = Color.DarkGray)
         )
     }
 }
 
 @Composable
 fun WidgetPill(icon: ImageVector, text: String) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(Color.White.copy(0.15f))
+            .background(textColor.copy(0.15f))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Icon(icon, contentDescription = null, tint = textColor, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text(text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(text, color = textColor, fontSize = 12.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun HeaderTypeSelectionContent(settings: AppSettings, onSelect: (HeaderType) -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .fillMaxHeight(0.71f) // Just short enough to leave the primary overlay's handle visible
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .background(Color(0xFF141414))
+            .background(cardBgColor)
             .padding(bottom = 60.dp, top = 16.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
+            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(textColor.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(32.dp))
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White))
+                Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(textColor))
                 Spacer(modifier = Modifier.width(16.dp))
-                Text("Headers type", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                Text("Headers type", color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             }
             
             Spacer(modifier = Modifier.height(32.dp))
@@ -586,6 +622,9 @@ fun OverlayContent(
     onUpdateSettings: (AppSettings) -> Unit, 
     onOpenNested: (NestedOverlay) -> Unit
 ) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     val context = LocalContext.current
     
     Box(
@@ -593,44 +632,44 @@ fun OverlayContent(
             .fillMaxWidth()
             .fillMaxHeight(0.76f) // 3.8/5 screen height
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .background(Color(0xFF141414))
+            .background(cardBgColor)
             .padding(bottom = 60.dp, top = 16.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
+            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(textColor.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
             Spacer(modifier = Modifier.height(32.dp))
 
             when (overlayType) {
                 OverlayType.Theme -> {
-                    Icon(Icons.Outlined.Palette, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
-                    Text("Theme", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("select theme that will be used across the app.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Icon(Icons.Outlined.Palette, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Theme", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("select theme that will be used across the app.", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(32.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         ThemeCard("Light theme", Icons.Outlined.LightMode, settings.theme == AppTheme.Light) { onUpdateSettings(settings.copy(theme = AppTheme.Light)) }
                         ThemeCard("dark theme", Icons.Outlined.DarkMode, settings.theme == AppTheme.Dark) { onUpdateSettings(settings.copy(theme = AppTheme.Dark)) }
                     }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Text("or", color = textColor.copy(alpha = 0.6f), fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(24.dp))
                     ThemeCard("Auto by system", Icons.Outlined.BrightnessAuto, settings.theme == AppTheme.Auto) { onUpdateSettings(settings.copy(theme = AppTheme.Auto)) }
                 }
                 OverlayType.Quote -> {
-                    Icon(Icons.Outlined.FormatQuote, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
-                    Text("Quote", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("The quote will be displayed for the weather.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Icon(Icons.Outlined.FormatQuote, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Quote", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("The quote will be displayed for the weather.", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(32.dp))
                     QuoteCard("Compact. short", "it feels like 21°C today,\nRaining until 10 PM. beware of flood", Icons.AutoMirrored.Outlined.ShortText, settings.quoteStyle == QuoteStyle.Compact) { onUpdateSettings(settings.copy(quoteStyle = QuoteStyle.Compact)) }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Text("or", color = textColor.copy(alpha = 0.6f), fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(24.dp))
                     QuoteCard("Summary", "its overcast and cloudy. broken clouds \non jakarta. visibility is 10km. the \ntemp feels like 21°C, quite \nhot. today rain probality is high", Icons.AutoMirrored.Outlined.Subject, settings.quoteStyle == QuoteStyle.Summary) { onUpdateSettings(settings.copy(quoteStyle = QuoteStyle.Summary)) }
                 }
                 OverlayType.Header -> {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White))
+                        Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(textColor))
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("Front page customisation", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Front page customisation", color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                     }
                     
                     Spacer(modifier = Modifier.height(48.dp))
@@ -646,11 +685,11 @@ fun OverlayContent(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(50))
-                            .border(1.dp, Color.White.copy(0.3f), RoundedCornerShape(50))
+                            .border(1.dp, textColor.copy(0.3f), RoundedCornerShape(50))
                             .clickable { onOpenNested(NestedOverlay.HeaderTypeSelection) }
                             .padding(horizontal = 16.dp, vertical = 8.dp)
                     ) {
-                        Text(typeName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                        Text(typeName, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Medium)
                     }
                     
                     Spacer(modifier = Modifier.height(48.dp))
@@ -658,23 +697,23 @@ fun OverlayContent(
                     // Fixed: __o with bottom alignment
                     Row(verticalAlignment = Alignment.Bottom) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(Color.White))
-                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(Color.White))
+                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(textColor))
+                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(textColor))
                         }
                         Spacer(modifier = Modifier.width(24.dp))
-                        Box(modifier = Modifier.size(48.dp).border(8.dp, Color.White, CircleShape))
+                        Box(modifier = Modifier.size(48.dp).border(8.dp, textColor, CircleShape))
                     }
                     
                     Spacer(modifier = Modifier.height(48.dp))
                     
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Box(modifier = Modifier.width(30.dp).height(4.dp).background(Color.White.copy(0.5f)))
-                        Box(modifier = Modifier.width(100.dp).height(4.dp).background(Color.White.copy(0.5f)))
+                        Box(modifier = Modifier.width(30.dp).height(4.dp).background(textColor.copy(0.5f)))
+                        Box(modifier = Modifier.width(100.dp).height(4.dp).background(textColor.copy(0.5f)))
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    Box(modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(20.dp)).padding(16.dp)) {
+                    Box(modifier = Modifier.fillMaxWidth().border(1.dp, textColor.copy(0.2f), RoundedCornerShape(20.dp)).padding(16.dp)) {
                         Column {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 WidgetPill(Icons.Outlined.FilterDrama, "AQI")
@@ -684,26 +723,26 @@ fun OverlayContent(
                             }
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(modifier = Modifier.size(24.dp).background(Color.White.copy(0.2f), CircleShape), contentAlignment = Alignment.Center) {
-                                    Text("+", color = Color.White, fontSize = 14.sp)
+                                Box(modifier = Modifier.size(24.dp).background(textColor.copy(0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                                    Text("+", color = textColor, fontSize = 14.sp)
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("Hold the widget for 4s to remove, drag to change position", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text("Hold the widget for 4s to remove, drag to change position", color = textColor, fontSize = 11.sp, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
                 }
                 OverlayType.Icons -> {
-                    Icon(Icons.Outlined.AppShortcut, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
-                    Text("Icons", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("select icons that will be used for the app", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Icon(Icons.Outlined.AppShortcut, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Icons", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("select icons that will be used for the app", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(32.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         AppIconCard("Light", R.drawable.iconslight, settings.appIcon == AppIcon.Day) { onUpdateSettings(settings.copy(appIcon = AppIcon.Day)) }
                         Spacer(modifier = Modifier.weight(1f))
                     }
                     Spacer(modifier = Modifier.height(24.dp))
-                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Text("or", color = textColor.copy(alpha = 0.6f), fontSize = 16.sp)
                     Spacer(modifier = Modifier.height(24.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         AppIconCard("Dark", R.drawable.iconsdark, settings.appIcon == AppIcon.NightFullMoon) { onUpdateSettings(settings.copy(appIcon = AppIcon.NightFullMoon)) }
@@ -711,18 +750,18 @@ fun OverlayContent(
                     }
                 }
                 OverlayType.Permissions -> {
-                    Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
-                    Text("Permission", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("The app need these to work", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Permission", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("The app need these to work", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(24.dp))
                     
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(24.dp),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(24.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("3/5", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+                        Text("3/5", color = textColor, fontSize = 48.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.width(16.dp))
-                        Text("permission are granted.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                        Text("permission are granted.", color = textColor.copy(alpha = 0.7f), fontSize = 14.sp)
                     }
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -733,14 +772,14 @@ fun OverlayContent(
                         context.startActivity(intent)
                     }
                     
-                    SettingsItemOverlay("Location", "", Icons.Outlined.LocationOn, Color.White) { reqPerm() }
-                    SettingsItemOverlay("background services", "", Icons.Outlined.SettingsSuggest, Color.White) { reqPerm() }
-                    SettingsItemOverlay("Battery Optimisation", "", Icons.Outlined.BatteryAlert, Color.White) { reqPerm() }
-                    SettingsItemOverlay("Networks", "", Icons.Outlined.Wifi, Color.White) { reqPerm() }
-                    SettingsItemOverlay("Notifications", "", Icons.Outlined.Notifications, Color.White) { reqPerm() }
+                    SettingsItemOverlay("Location", "", Icons.Outlined.LocationOn) { reqPerm() }
+                    SettingsItemOverlay("background services", "", Icons.Outlined.SettingsSuggest) { reqPerm() }
+                    SettingsItemOverlay("Battery Optimisation", "", Icons.Outlined.BatteryAlert) { reqPerm() }
+                    SettingsItemOverlay("Networks", "", Icons.Outlined.Wifi) { reqPerm() }
+                    SettingsItemOverlay("Notifications", "", Icons.Outlined.Notifications) { reqPerm() }
                     
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("We wont collect and store ANY data you given to us. the app only collect location data ( if permitted ) and ip address to display accurate location of the current weather. we will never collect and STORE any data.", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp, lineHeight = 14.sp)
+                    Text("We wont collect and store ANY data you given to us. the app only collect location data ( if permitted ) and ip address to display accurate location of the current weather. we will never collect and STORE any data.", color = textColor.copy(alpha = 0.4f), fontSize = 11.sp, lineHeight = 14.sp)
                 }
                 OverlayType.Credits -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
@@ -748,23 +787,23 @@ fun OverlayContent(
                             modifier = Modifier.size(100.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFFB5D0FF)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(50.dp))
+                            Icon(Icons.Outlined.Cloud, contentDescription = null, tint = textColor, modifier = Modifier.size(50.dp))
                         }
                         
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Weatherify", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        Text("Weatherify", color = textColor, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         
                         Spacer(modifier = Modifier.height(32.dp))
 
                         Box(
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(24.dp)
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(24.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFD9D9D9)))
                                 Spacer(modifier = Modifier.width(20.dp))
                                 Column {
-                                    Text("BUILD 0.28", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
-                                    Text("Release-DEV-02", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                                    Text("BUILD 0.28", color = textColor, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
+                                    Text("Release-DEV-02", color = textColor.copy(alpha = 0.7f), fontSize = 14.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
@@ -772,7 +811,7 @@ fun OverlayContent(
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(20.dp)) {
+                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(20.dp)) {
                                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
                                     Image(
                                         painter = painterResource(id = R.drawable.profile_pic),
@@ -780,13 +819,13 @@ fun OverlayContent(
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.size(56.dp).clip(CircleShape)
                                     )
-                                    Text("Made by idkroo\nwith <3", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text("Made by idkroo\nwith <3", color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
 
-                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(20.dp)) {
+                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(20.dp)) {
                                 Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
-                                    Text("this app is\nopen source.\nforever yours.", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, lineHeight = 20.sp)
+                                    Text("this app is\nopen source.\nforever yours.", color = textColor, fontSize = 14.sp, fontFamily = FontFamily.Monospace, lineHeight = 20.sp)
                                     Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFD9D9D9)), contentAlignment = Alignment.Center) {
                                         Icon(Icons.Outlined.FavoriteBorder, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
                                     }
@@ -804,9 +843,9 @@ fun OverlayContent(
                     }
                 }
                 OverlayType.Provider -> {
-                    Icon(Icons.Outlined.CloudQueue, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
-                    Text("Weather Provider", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text("Select the weather provider for the app.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Icon(Icons.Outlined.CloudQueue, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Weather Provider", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("Select the weather provider for the app.", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(32.dp))
                     
                     ProviderCard("OpenWeather", "Global coverage", Icons.Outlined.Language, settings.provider == "OpenWeather") { 
@@ -819,10 +858,73 @@ fun OverlayContent(
                         WeatherBackend.setProvider("BMKG")
                     }
                     Spacer(modifier = Modifier.height(16.dp))
-                    ProviderCard("Google Weather API", "Global coverage", Icons.Outlined.CloudCircle, settings.provider == "Google") { 
-                        onUpdateSettings(settings.copy(provider = "Google"))
-                        WeatherBackend.setProvider("Google")
+                    ProviderCard("National Weather Service", "US only", Icons.Outlined.CloudCircle, settings.provider == "National Weather Service") { 
+                        onUpdateSettings(settings.copy(provider = "National Weather Service"))
+                        WeatherBackend.setProvider("National Weather Service")
                     }
+                    Text("Want more provider? go to custom api keys.", color = textColor.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(top=16.dp))
+                }
+                OverlayType.ApiKeys -> {
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = textColor, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Api Keys", color = textColor, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    Text("Weather map api keys", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    var mapApiKey by remember { mutableStateOf("") }
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = mapApiKey, onValueChange = { mapApiKey = it },
+                        textStyle = TextStyle(color = textColor, fontSize = 16.sp),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(16.dp),
+                        decorationBox = { inner -> if (mapApiKey.isEmpty()) Text("Go Here", color = textColor.copy(alpha=0.5f)) else inner() },
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(textColor)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Text("Weather API Keys", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(16.dp).clickable { onUpdateSettings(settings.copy(customApiEnabled = !settings.customApiEnabled)); WeatherBackend.setCustomApi(!settings.customApiEnabled, settings.customApiProvider, settings.customApiKey) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Enable custom API Keys", color = textColor, fontWeight = FontWeight.SemiBold)
+                                Text("This will disable our api key", color = textColor.copy(alpha=0.6f), fontSize = 12.sp)
+                            }
+                            androidx.compose.material3.Switch(checked = settings.customApiEnabled, onCheckedChange = { onUpdateSettings(settings.copy(customApiEnabled = it)); WeatherBackend.setCustomApi(it, settings.customApiProvider, settings.customApiKey) })
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("Api Keys Provider", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(16.dp).clickable{
+                        val newProvider = when(settings.customApiProvider) {
+                            "Google Weather" -> "Accuweather"
+                            "Accuweather" -> "OpenWeather"
+                            "OpenWeather" -> "OpenMeteo"
+                            else -> "Google Weather"
+                        }
+                        onUpdateSettings(settings.copy(customApiProvider = newProvider))
+                        WeatherBackend.setCustomApi(settings.customApiEnabled, newProvider, settings.customApiKey)
+                    }) {
+                        Row {
+                            Text(settings.customApiProvider, color = textColor)
+                            Spacer(modifier=Modifier.weight(1f))
+                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = null, tint = textColor)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Text("API Keys Query", color = textColor.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    androidx.compose.foundation.text.BasicTextField(
+                        value = settings.customApiKey, onValueChange = { onUpdateSettings(settings.copy(customApiKey = it)); WeatherBackend.setCustomApi(settings.customApiEnabled, settings.customApiProvider, it) },
+                        textStyle = TextStyle(color = textColor, fontSize = 16.sp),
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(cardBgColor).padding(16.dp),
+                        decorationBox = { inner -> if (settings.customApiKey.isEmpty()) Text("Enter your api keys here", color = textColor.copy(alpha=0.5f)) else inner() },
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(textColor)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Need help how to get api keys?", color = textColor.copy(alpha = 0.5f), fontSize = 11.sp, modifier = Modifier.clip(RoundedCornerShape(50)).background(iconBgColor).padding(horizontal=10.dp, vertical=4.dp))
                 }
                 OverlayType.None -> {}
             }
@@ -832,11 +934,14 @@ fun OverlayContent(
 
 @Composable
 fun AppIconCard(title: String, drawableId: Int, isSelected: Boolean, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = Modifier
             .width(150.dp).height(120.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .background(if (isSelected) textColor.copy(alpha = 0.4f) else textColor.copy(alpha = 0.05f))
             .clickable { onClick() }
             .padding(16.dp)
     ) {
@@ -845,75 +950,86 @@ fun AppIconCard(title: String, drawableId: Int, isSelected: Boolean, onClick: ()
             contentDescription = null,
             modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).align(Alignment.TopStart)
         )
-        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+        Text(title, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
     }
 }
 
 @Composable
 fun ThemeCard(title: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = Modifier
             .width(150.dp).height(120.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .background(if (isSelected) textColor.copy(alpha = 0.4f) else textColor.copy(alpha = 0.05f))
             .clickable { onClick() }
             .padding(16.dp)
     ) {
-        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)).align(Alignment.TopStart), contentAlignment = Alignment.Center) {
-            Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor).align(Alignment.TopStart), contentAlignment = Alignment.Center) {
+            Icon(imageVector = icon, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
         }
-        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+        Text(title, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
     }
 }
 
 @Composable
 fun QuoteCard(title: String, preview: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isSelected) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .background(if (isSelected) textColor.copy(alpha = 0.15f) else textColor.copy(alpha = 0.05f))
             .clickable { onClick() }
             .padding(24.dp)
     ) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
-                    Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = icon, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(modifier = Modifier.height(16.dp))
-            Text(preview, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+            Text(preview, color = textColor.copy(alpha = 0.8f), fontSize = 14.sp)
         }
     }
 }
 
 @Composable
 fun HeaderGridCard(title: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .background(if (isSelected) textColor.copy(alpha = 0.4f) else textColor.copy(alpha = 0.05f))
             .clickable { onClick() }
             .padding(16.dp)
     ) {
         Box(
             modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFD9D9D9)).align(Alignment.TopStart)
         )
-        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+        Text(title, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
     }
 }
 
 @Composable
 fun CreditLinkItem(text: String, icon: ImageVector) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(50))
-            .background(Color(0xFF1A1A1A))
+            .background(cardBgColor)
             .clickable { /* Handle click */ }
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -922,28 +1038,31 @@ fun CreditLinkItem(text: String, icon: ImageVector) {
             Icon(icon, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
-        Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Text(text, color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
     }
 }
 
 @Composable
 fun ProviderCard(title: String, subtitle: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    val textColor = LocalTextColor.current
+    val cardBgColor = LocalCardBgColor.current
+    val iconBgColor = LocalIconBgColor.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(if (isSelected) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .background(if (isSelected) textColor.copy(alpha = 0.15f) else textColor.copy(alpha = 0.05f))
             .clickable { onClick() }
             .padding(16.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
-                Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(iconBgColor), contentAlignment = Alignment.Center) {
+                Icon(imageVector = icon, contentDescription = null, tint = textColor, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column {
-                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                Text(title, color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = textColor.copy(alpha = 0.6f), fontSize = 12.sp)
             }
         }
     }

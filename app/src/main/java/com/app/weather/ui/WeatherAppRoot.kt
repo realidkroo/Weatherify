@@ -2,7 +2,11 @@ package com.app.weather.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -43,7 +47,7 @@ enum class AppTheme { Light, Dark, Auto }
 enum class QuoteStyle { Compact, Summary }
 enum class HeaderType { Greeting, FeelsLike, Sunrise, Disabled, Standard }
 enum class AppIcon { Day, NightFullMoon, NightMoon }
-enum class OverlayType { None, Theme, Quote, Header, Icons, Permissions, Credits, Provider }
+enum class OverlayType { None, Theme, Quote, Header, Icons, Permissions, Credits, Provider, ApiKeys }
 enum class NestedOverlay { None, HeaderTypeSelection }
 enum class NavType { Tab, Push, Pop, Instant }
 
@@ -58,8 +62,54 @@ data class AppSettings(
     val appIcon:      AppIcon    = AppIcon.Day,
     val enableClouds: Boolean    = false,
     val debugRotateWindSpeed: Boolean = false,
-    val provider:     String     = "OpenWeather"
+    val provider:     String     = "OpenWeather",
+    val customApiEnabled: Boolean = false,
+    val customApiProvider: String = "Select here",
+    val customApiKey: String = ""
 )
+
+object SettingsStore {
+    private const val PREFS_NAME = "weatherify_settings"
+
+    fun save(context: Context, settings: AppSettings) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().apply {
+            putString("theme", settings.theme.name)
+            putBoolean("haptics", settings.haptics)
+            putBoolean("blur", settings.blur)
+            putBoolean("animation", settings.animation)
+            putBoolean("fx", settings.fx)
+            putString("quoteStyle", settings.quoteStyle.name)
+            putString("headerType", settings.headerType.name)
+            putString("appIcon", settings.appIcon.name)
+            putBoolean("enableClouds", settings.enableClouds)
+            putBoolean("debugRotateWindSpeed", settings.debugRotateWindSpeed)
+            putString("provider", settings.provider)
+            putBoolean("customApiEnabled", settings.customApiEnabled)
+            putString("customApiProvider", settings.customApiProvider)
+            putString("customApiKey", settings.customApiKey)
+        }.apply()
+    }
+
+    fun load(context: Context): AppSettings {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return AppSettings(
+            theme = AppTheme.valueOf(prefs.getString("theme", AppTheme.Dark.name) ?: AppTheme.Dark.name),
+            haptics = prefs.getBoolean("haptics", true),
+            blur = prefs.getBoolean("blur", true),
+            animation = prefs.getBoolean("animation", true),
+            fx = prefs.getBoolean("fx", true),
+            quoteStyle = QuoteStyle.valueOf(prefs.getString("quoteStyle", QuoteStyle.Compact.name) ?: QuoteStyle.Compact.name),
+            headerType = HeaderType.valueOf(prefs.getString("headerType", HeaderType.Standard.name) ?: HeaderType.Standard.name),
+            appIcon = AppIcon.valueOf(prefs.getString("appIcon", AppIcon.Day.name) ?: AppIcon.Day.name),
+            enableClouds = prefs.getBoolean("enableClouds", false),
+            debugRotateWindSpeed = prefs.getBoolean("debugRotateWindSpeed", false),
+            provider = prefs.getString("provider", "OpenWeather") ?: "OpenWeather",
+            customApiEnabled = prefs.getBoolean("customApiEnabled", false),
+            customApiProvider = prefs.getString("customApiProvider", "Select here") ?: "Select here",
+            customApiKey = prefs.getString("customApiKey", "") ?: ""
+        )
+    }
+}
 
 @SuppressLint("MissingPermission")
 @Composable
@@ -69,9 +119,7 @@ fun WeatherAppRoot() {
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
-    val screenWidthPx = with(density) {
-        LocalConfiguration.current.screenWidthDp.dp.toPx()
-    }
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
 
     var backStack    by remember { mutableStateOf(listOf(Destination.Weather)) }
     var forwardStack by remember { mutableStateOf(listOf<Destination>()) }
@@ -79,9 +127,14 @@ fun WeatherAppRoot() {
     var navType      by remember { mutableStateOf(NavType.Tab) }
 
     var settingsMenu by remember { mutableStateOf("Main") }
-
     var weatherData  by remember { mutableStateOf(WeatherCache.load(context) ?: WeatherData.Default) }
-    var settings     by remember { mutableStateOf(AppSettings()) }
+    var settings     by remember { mutableStateOf(SettingsStore.load(context)) }
+
+    LaunchedEffect(settings) {
+        SettingsStore.save(context, settings)
+        WeatherBackend.setProvider(settings.provider)
+        WeatherBackend.setCustomApi(settings.customApiEnabled, settings.customApiProvider, settings.customApiKey)
+    }
 
     var activeOverlay    by remember { mutableStateOf(OverlayType.None) }
     var displayedOverlay by remember { mutableStateOf(OverlayType.None) }
@@ -94,90 +147,64 @@ fun WeatherAppRoot() {
 
     val swipeOffset   = remember { Animatable(0f) }
     var swipeBgDest   by remember { mutableStateOf<Destination?>(null) }
-
     val glassState = remember { GlassState() }
-
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     fun loadWeatherForLocation(lat: Double?, lon: Double?) {
         coroutineScope.launch {
-            val res = if (lat != null && lon != null)
-                WeatherBackend.fetchWeatherByLocation(lat, lon)
-            else
-                WeatherBackend.fetchWeather("Jakarta")
+            val res = if (lat != null && lon != null) WeatherBackend.fetchWeatherByLocation(lat, lon)
+                      else WeatherBackend.fetchWeather("Jakarta")
             weatherData = res
             WeatherCache.save(context, res)
         }
     }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                .addOnSuccessListener { loc ->
-                    if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
-                    else loadWeatherForLocation(null, null)
-                }
-                .addOnFailureListener { loadWeatherForLocation(null, null) }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true || permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).addOnSuccessListener { loc ->
+                if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
+                else loadWeatherForLocation(null, null)
+            }.addOnFailureListener { loadWeatherForLocation(null, null) }
         } else loadWeatherForLocation(null, null)
     }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                .addOnSuccessListener { loc ->
-                    if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
-                    else loadWeatherForLocation(null, null)
-                }
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null).addOnSuccessListener { loc ->
+                if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
+                else loadWeatherForLocation(null, null)
+            }
         } else {
-            permissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
-            )
+            permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
     }
 
     val dynamicBarBg by animateColorAsState(
-        targetValue = if (currentDestination != Destination.Weather) {
-            Color.Black.copy(alpha = 0.45f)
-        } else when (weatherData.type) {
-            WeatherType.Clear, WeatherType.Clouds, WeatherType.Snow -> Color.Black.copy(alpha = 0.15f)
-            else -> Color.White.copy(alpha = 0.12f)
-        },
-        animationSpec = tween(500), label = ""
+        targetValue = if (currentDestination != Destination.Weather) Color.Black.copy(alpha = 0.45f)
+                      else when (weatherData.type) {
+                          WeatherType.Clear, WeatherType.Clouds, WeatherType.Snow -> Color.Black.copy(alpha = 0.15f)
+                          else -> Color.White.copy(alpha = 0.12f)
+                      }, animationSpec = tween(500), label = ""
     )
 
     fun handleBack(requestedNavType: NavType = NavType.Pop) {
-        if (activeNestedOverlay != NestedOverlay.None) {
-            activeNestedOverlay = NestedOverlay.None
-        } else if (activeOverlay != OverlayType.None) {
-            activeOverlay = OverlayType.None
-        } else if (currentDestination == Destination.Settings && settingsMenu != "Main") {
-            // Handled inside SettingsScreen
-        } else if (backStack.size > 1) {
+        if (activeNestedOverlay != NestedOverlay.None) activeNestedOverlay = NestedOverlay.None
+        else if (activeOverlay != OverlayType.None) activeOverlay = OverlayType.None
+        else if (currentDestination == Destination.Settings && settingsMenu != "Main") { /* Handled in SettingsScreen */ } 
+        else if (backStack.size > 1) {
             navType = requestedNavType
             forwardStack = listOf(backStack.last()) + forwardStack
             backStack = backStack.dropLast(1)
-        } else {
-            activity?.finish()
-        }
+        } else activity?.finish()
     }
 
-    BackHandler(enabled = backStack.size > 1 || activeOverlay != OverlayType.None) {
-        handleBack(NavType.Pop)
-    }
+    BackHandler(enabled = backStack.size > 1 || activeOverlay != OverlayType.None) { handleBack(NavType.Pop) }
 
     LaunchedEffect(activeOverlay, activeNestedOverlay) {
         when {
-            activeNestedOverlay != NestedOverlay.None -> {
-                stackedOverlayProgress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 400f))
-            }
+            activeNestedOverlay != NestedOverlay.None -> stackedOverlayProgress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 400f))
             activeOverlay != OverlayType.None -> {
-                if (stackedOverlayProgress.value > 0f) {
-                    stackedOverlayProgress.animateTo(0f, spring(dampingRatio = 0.95f, stiffness = 500f))
-                }
+                if (stackedOverlayProgress.value > 0f) stackedOverlayProgress.animateTo(0f, spring(dampingRatio = 0.95f, stiffness = 500f))
                 displayedOverlay = activeOverlay
                 overlayProgress.animateTo(1f, spring(dampingRatio = 0.85f, stiffness = 300f))
             }
@@ -189,192 +216,59 @@ fun WeatherAppRoot() {
         }
     }
 
-    val renderDestination: @Composable (Destination) -> Unit = { dest ->
-        when (dest) {
-            Destination.Weather  -> MainWeatherScreen(data = weatherData, settings = settings)
-            Destination.Search   -> SearchScreen(onBack = { handleBack(NavType.Pop) })
-            Destination.Settings -> SettingsScreen(
-                settings            = settings,
-                currentMenu         = settingsMenu,
-                onSelectWeather     = { weatherData = weatherData.copy(type = it, description = "forced ${it.title.lowercase()}") },
-                onMenuChange        = { settingsMenu = it },
-                onUpdateSettings    = { settings = it },
-                onOpenOverlay       = { activeOverlay = it },
-                onBack              = { handleBack(NavType.Pop) }
-            )
-        }
-    }
-
-    // App scales down twice: once for the main overlay, and a bit more for the nested one
-    val backgroundAppScale  = 1f - 0.08f * overlayProgress.value - 0.05f * stackedOverlayProgress.value
-    val backgroundAppBlur   = (12f * overlayProgress.value + 8f * stackedOverlayProgress.value).dp
-    val backgroundAppRadius = (32f * overlayProgress.value + 16f * stackedOverlayProgress.value).dp
-
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = backgroundAppScale
-                    scaleY = backgroundAppScale
-                }
-                .clip(RoundedCornerShape(backgroundAppRadius))
-                .blur(backgroundAppBlur, BlurredEdgeTreatment.Unbounded)
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                scaleX = 1f - 0.08f * overlayProgress.value - 0.05f * stackedOverlayProgress.value
+                scaleY = 1f - 0.08f * overlayProgress.value - 0.05f * stackedOverlayProgress.value
+            }.clip(RoundedCornerShape((32f * overlayProgress.value + 16f * stackedOverlayProgress.value).dp))
+             .blur((12f * overlayProgress.value + 8f * stackedOverlayProgress.value).dp, BlurredEdgeTreatment.Unbounded)
         ) {
-            if (swipeOffset.value != 0f && swipeBgDest != null) {
-                val parallaxX = if (swipeOffset.value > 0f) (swipeOffset.value - screenWidthPx) * 0.3f
-                               else (swipeOffset.value + screenWidthPx) * 0.3f
-                Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = parallaxX }) {
-                    renderDestination(swipeBgDest!!)
-                    val progress = (kotlin.math.abs(swipeOffset.value) / screenWidthPx).coerceIn(0f, 1f)
-                    val shadowAlpha = 0.6f * (1f - progress)
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = shadowAlpha)))
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .offset { IntOffset(swipeOffset.value.roundToInt(), 0) }
-                    .background(Color(0xFF0D0D0D))
-                    .pointerInput(currentDestination, settingsMenu) {
-                        var dragAccumulator = 0f
-                        var isEdgeSwipe = false
-                        var swipeDirection = 0
-
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                dragAccumulator = 0f
-                                val canRootSwipeBack = backStack.size > 1 &&
-                                        !(currentDestination == Destination.Settings && settingsMenu != "Main")
-
-                                when {
-                                    offset.x < 200f && canRootSwipeBack -> {
-                                        isEdgeSwipe   = true
-                                        swipeDirection = 1
-                                        swipeBgDest   = backStack[backStack.lastIndex - 1]
-                                    }
-                                    offset.x > size.width - 200f && forwardStack.isNotEmpty() &&
-                                            currentDestination != Destination.Weather -> {
-                                        isEdgeSwipe   = true
-                                        swipeDirection = -1
-                                        swipeBgDest   = forwardStack.first()
-                                    }
-                                    else -> isEdgeSwipe = false
-                                }
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                if (isEdgeSwipe) {
-                                    dragAccumulator += dragAmount
-                                    if ((swipeDirection == 1 && dragAccumulator > 0) ||
-                                        (swipeDirection == -1 && dragAccumulator < 0)) {
-                                        coroutineScope.launch { swipeOffset.snapTo(dragAccumulator) }
-                                    }
-                                }
-                            },
-                            onDragEnd = {
-                                if (isEdgeSwipe) {
-                                    coroutineScope.launch {
-                                        if (swipeDirection == 1 && dragAccumulator > 150f) {
-                                            swipeOffset.animateTo(screenWidthPx, tween(200, easing = LinearEasing))
-                                            handleBack(NavType.Instant)
-                                            delay(32)
-                                            swipeOffset.snapTo(0f)
-                                            swipeBgDest = null
-                                        } else if (swipeDirection == -1 && dragAccumulator < -150f) {
-                                            swipeOffset.animateTo(-screenWidthPx, tween(200, easing = LinearEasing))
-                                            navType = NavType.Instant
-                                            val next = forwardStack.first()
-                                            forwardStack = forwardStack.drop(1)
-                                            backStack = backStack + next
-                                            delay(32)
-                                            swipeOffset.snapTo(0f)
-                                            swipeBgDest = null
-                                        } else {
-                                            swipeOffset.animateTo(0f, spring(stiffness = 300f))
-                                            swipeBgDest = null
-                                        }
-                                    }
-                                }
-                            },
-                            onDragCancel = {
-                                coroutineScope.launch {
-                                    swipeOffset.animateTo(0f, spring(stiffness = 300f))
-                                    swipeBgDest = null
-                                }
-                            }
+            Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0D0D0D))) {
+                AnimatedContent(targetState = currentDestination, label = "AppNavigation") { destination ->
+                    when (destination) {
+                        Destination.Weather  -> MainWeatherScreen(data = weatherData, settings = settings)
+                        Destination.Search   -> SearchScreen(onBack = { handleBack(NavType.Pop) })
+                        Destination.Settings -> SettingsScreen(
+                            settings = settings, currentMenu = settingsMenu,
+                            onSelectWeather = { weatherData = weatherData.copy(type = it, description = "forced state") },
+                            onMenuChange = { settingsMenu = it },
+                            onUpdateSettings = { settings = it },
+                            onOpenOverlay = { activeOverlay = it },
+                            onBack = { handleBack(NavType.Pop) }
                         )
-                    }
-            ) {
-                Box(modifier = Modifier.fillMaxSize().glassRoot(glassState)) {
-                    AnimatedContent(
-                        targetState = currentDestination,
-                        label       = "AppNavigation",
-                        modifier    = Modifier.fillMaxSize(),
-                        transitionSpec = {
-                            if (navType == NavType.Tab) {
-                                (fadeIn(animationSpec = tween(400, delayMillis = 50)) + scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f))) togetherWith
-                                (fadeOut(animationSpec = tween(300)) + scaleOut(targetScale = 1.08f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f)))
-                            } else {
-                                EnterTransition.None togetherWith ExitTransition.None
-                            }
-                        }
-                    ) { destination ->
-                        renderDestination(destination)
                     }
                 }
             }
         
             LiquidGlassNavBar(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 40.dp),
-                barBackground      = dynamicBarBg,
-                weatherType        = weatherData.type,
-                activeDestination  = currentDestination,
-                glassState         = glassState,
-                onWeatherCycle     = {},
-                onNavigate         = { dest ->
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+                barBackground = dynamicBarBg, weatherType = weatherData.type,
+                activeDestination = currentDestination, glassState = glassState,
+                onWeatherCycle = {},
+                onNavigate = { dest ->
                     if (dest != currentDestination) {
-                        navType      = NavType.Tab
+                        navType = NavType.Tab
                         forwardStack = emptyList()
                         settingsMenu = "Main"
-                        backStack    = if (dest == Destination.Weather) listOf(Destination.Weather)
-                                       else backStack + dest
+                        backStack = if (dest == Destination.Weather) listOf(Destination.Weather) else backStack + dest
                     }
                 }
             )
         }
 
-        if (stackedOverlayProgress.value > 0f) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f * stackedOverlayProgress.value)))
-        }
+        if (stackedOverlayProgress.value > 0f) Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f * stackedOverlayProgress.value)))
 
         if (displayedOverlay != OverlayType.None || overlayProgress.value > 0f) {
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = overlayProgress.value * 0.5f }.background(Color.Black).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { handleBack() })
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = overlayProgress.value * 0.5f }
-                    .background(Color.Black)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { handleBack() }
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onGloballyPositioned { primaryOverlayHeightPx = it.size.height.toFloat() }
+                modifier = Modifier.align(Alignment.BottomCenter).onGloballyPositioned { primaryOverlayHeightPx = it.size.height.toFloat() }
                     .graphicsLayer {
-                        // Scales down but NO extra translation upward
                         scaleX = 1f - 0.06f * stackedOverlayProgress.value
                         scaleY = 1f - 0.06f * stackedOverlayProgress.value
                         translationY = ((1f - overlayProgress.value) * primaryOverlayHeightPx)
                         alpha = 1f - 0.2f * stackedOverlayProgress.value
-                    }
-                    .blur((8f * stackedOverlayProgress.value).dp, BlurredEdgeTreatment.Unbounded)
+                    }.blur((8f * stackedOverlayProgress.value).dp, BlurredEdgeTreatment.Unbounded)
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragEnd = {
@@ -383,61 +277,12 @@ fun WeatherAppRoot() {
                             },
                             onVerticalDrag = { change, dragAmount ->
                                 change.consume()
-                                val deltaProgress = dragAmount / (primaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
-                                val newProgress = (overlayProgress.value - deltaProgress).coerceIn(0f, 1f)
-                                coroutineScope.launch { overlayProgress.snapTo(newProgress) }
+                                coroutineScope.launch { overlayProgress.snapTo((overlayProgress.value - (dragAmount / (primaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f))).coerceIn(0f, 1f)) }
                             }
                         )
                     }
             ) {
-                OverlayContent(
-                    overlayType       = displayedOverlay,
-                    settings          = settings,
-                    onUpdateSettings  = { settings = it },
-                    onOpenNested      = { activeNestedOverlay = it }
-                )
-            }
-        }
-
-        if (activeNestedOverlay != NestedOverlay.None || stackedOverlayProgress.value > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { activeNestedOverlay = NestedOverlay.None }
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onGloballyPositioned { secondaryOverlayHeightPx = it.size.height.toFloat() }
-                    .graphicsLayer {
-                        translationY = (1f - stackedOverlayProgress.value) * secondaryOverlayHeightPx
-                    }
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                if (stackedOverlayProgress.value < 0.8f) activeNestedOverlay = NestedOverlay.None
-                                else coroutineScope.launch { stackedOverlayProgress.animateTo(1f, spring(stiffness = 400f)) }
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                val deltaProgress = dragAmount / (secondaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
-                                val newProgress = (stackedOverlayProgress.value - deltaProgress).coerceIn(0f, 1f)
-                                coroutineScope.launch { stackedOverlayProgress.snapTo(newProgress) }
-                            }
-                        )
-                    }
-            ) {
-                HeaderTypeSelectionContent(
-                    settings = settings,
-                    onSelect = { type ->
-                        settings = settings.copy(headerType = type)
-                        activeNestedOverlay = NestedOverlay.None 
-                    }
-                )
+                OverlayContent(overlayType = displayedOverlay, settings = settings, onUpdateSettings = { settings = it }, onOpenNested = { activeNestedOverlay = it })
             }
         }
     }

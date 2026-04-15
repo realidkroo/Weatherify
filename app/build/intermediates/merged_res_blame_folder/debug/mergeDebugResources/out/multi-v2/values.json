@@ -182,7 +182,7 @@
                     }
                 },
                 {
-                    "source": "/Users/roo/Documents/WeatherApp/app/src/main/res/values/themes.xml",
+                    "source": "/Users/roo/Documents/weatherify/app/src/main/res/values/themes.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

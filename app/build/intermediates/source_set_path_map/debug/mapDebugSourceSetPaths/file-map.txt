@@ -39,10 +39,10 @@ com.app.weather.app-ui-geometry-release-37 /Users/roo/.gradle/caches/9.0.0/trans
 com.app.weather.app-ui-util-release-38 /Users/roo/.gradle/caches/9.0.0/transforms/e136a3ed4520c088ab1e38caa0f561fa/transformed/ui-util-release/res
 com.app.weather.app-material-ripple-release-39 /Users/roo/.gradle/caches/9.0.0/transforms/e2d9ea8545b0f026374ef914e6937945/transformed/material-ripple-release/res
 com.app.weather.app-ui-tooling-preview-release-40 /Users/roo/.gradle/caches/9.0.0/transforms/ffd7f088a2abe6b17dcc89d149961892/transformed/ui-tooling-preview-release/res
-com.app.weather.app-pngs-41 /Users/roo/Documents/WeatherApp/app/build/generated/res/pngs/debug
-com.app.weather.app-resValues-42 /Users/roo/Documents/WeatherApp/app/build/generated/res/resValues/debug
-com.app.weather.app-packageDebugResources-43 /Users/roo/Documents/WeatherApp/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
-com.app.weather.app-packageDebugResources-44 /Users/roo/Documents/WeatherApp/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
-com.app.weather.app-debug-45 /Users/roo/Documents/WeatherApp/app/build/intermediates/merged_res/debug/mergeDebugResources
-com.app.weather.app-debug-46 /Users/roo/Documents/WeatherApp/app/src/debug/res
-com.app.weather.app-main-47 /Users/roo/Documents/WeatherApp/app/src/main/res
+com.app.weather.app-pngs-41 /Users/roo/Documents/weatherify/app/build/generated/res/pngs/debug
+com.app.weather.app-resValues-42 /Users/roo/Documents/weatherify/app/build/generated/res/resValues/debug
+com.app.weather.app-packageDebugResources-43 /Users/roo/Documents/weatherify/app/build/intermediates/incremental/debug/packageDebugResources/merged.dir
+com.app.weather.app-packageDebugResources-44 /Users/roo/Documents/weatherify/app/build/intermediates/incremental/debug/packageDebugResources/stripped.dir
+com.app.weather.app-debug-45 /Users/roo/Documents/weatherify/app/build/intermediates/merged_res/debug/mergeDebugResources
+com.app.weather.app-debug-46 /Users/roo/Documents/weatherify/app/src/debug/res
+com.app.weather.app-main-47 /Users/roo/Documents/weatherify/app/src/main/res

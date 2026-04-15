@@ -213,10 +213,33 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
     val density = LocalDensity.current
     val excessScroll = (scrollOffset - 800f).coerceAtLeast(0f)
 
+    var isRefreshing by remember { mutableStateOf(false) }
+    var showRefreshText by remember { mutableStateOf(false) }
+
     val scrollableState = rememberScrollableState { delta ->
-        scrollOffset = (scrollOffset - delta).coerceIn(0f, maxScroll)
+        scrollOffset = (scrollOffset - delta).coerceIn(if (isRefreshing) -150f else -600f, maxScroll)
         delta
     }
+
+    LaunchedEffect(scrollableState.isScrollInProgress) {
+        if (!scrollableState.isScrollInProgress) {
+            if (scrollOffset < -150f) {
+                isRefreshing = true
+                showRefreshText = true
+                animate(scrollOffset, -150f, animationSpec = spring()) { value, _ -> scrollOffset = value }
+                kotlinx.coroutines.delay(2000)
+                isRefreshing = false
+                animate(scrollOffset, 0f, animationSpec = spring()) { value, _ -> scrollOffset = value }
+                showRefreshText = false
+            } else if (scrollOffset < 0f && !isRefreshing) {
+                animate(scrollOffset, 0f, animationSpec = spring()) { value, _ -> scrollOffset = value }
+            }
+        } else {
+             if (scrollOffset < 0f) showRefreshText = true
+        }
+    }
+
+    val pullDownOffset = (-scrollOffset).coerceAtLeast(0f)
 
     val headerProgress = (scrollOffset / 800f).coerceIn(0f, 1f)
     val smoothProgress by animateFloatAsState(targetValue = headerProgress, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f), label = "")
@@ -337,7 +360,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
         }
 
         // ── Header & widgets ───────────────────────────────────────────────
-        Box(modifier = Modifier.fillMaxWidth().height(8000.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().height(8000.dp).offset(y = pullDownOffset.dp)) {
 
             // Quote / description block
             val dynamicQuote = if (settings.quoteStyle == QuoteStyle.Compact) {
@@ -406,6 +429,24 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
             Column(modifier = Modifier.fillMaxWidth().offset(y = widgetY).padding(horizontal = 24.dp)) {
 
+                // ── Warning Widget ──────────────────────────────────────────
+                if (data.activeAlert != null) {
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White.copy(alpha = 0.15f)).padding(16.dp)) {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFFB74D), modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(data.activeAlert.title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.width(8.dp))
+                                Text(data.activeAlert.provider, color = Color.White.copy(alpha=0.6f), fontSize = 12.sp)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Text(data.activeAlert.description, color = Color.White.copy(alpha=0.8f), fontSize = 13.sp, lineHeight = 18.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
                 // ── Hourly forecast ────────────────────────────────────────
                 FullWidgetBox(icon = Icons.Default.WatchLater, label = "Hourly forecast") {
                     Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -447,25 +488,52 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 2-column grid: Precipitation + Humidity ────────────────
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Precipitation
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                // ── Possible Light Rain Graph ──────────────────────────────
+                if (data.minutelyRain != null && data.minutelyRain.isNotEmpty()) {
+                    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
-                            WidgetLabel(Icons.Default.WaterDrop, "Precipitation")
-                            Spacer(Modifier.height(8.dp))
-                            val precipMm = data.rainfallNext24h ?: 0.0
-                            Text("${String.format("%.1f", precipMm)} mm", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text("expected today", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                            Spacer(Modifier.weight(1f))
-                            // progress bar
-                            val frac = (precipMm / 50.0).coerceIn(0.0, 1.0).toFloat()
-                            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
-                                Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(frac.coerceAtLeast(0.03f)).clip(RoundedCornerShape(50)).background(Color(0xFF81D4FA)))
+                            WidgetLabel(Icons.Default.WaterDrop, "Possible Light Rain")
+                            Spacer(Modifier.height(4.dp))
+                            Text("Chance of light rain in the next hour.", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                            Spacer(Modifier.height(16.dp))
+                            
+                            // Graph container
+                            androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().height(100.dp)) {
+                                // Background dashes
+                                val dashLines = 4
+                                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                                    repeat(dashLines) {
+                                        androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxWidth().height(1.dp).alpha(0.2f)) {
+                                            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                                                drawLine(color = Color.White, start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f))
+                                            }
+                                        }
+                                    }
+                                }
+                                // Bars
+                                Row(modifier = Modifier.fillMaxSize().padding(bottom = 1.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                                    data.minutelyRain.forEachIndexed { i, value ->
+                                        val heightF = (value.toFloat() / 5f).coerceIn(0f, 1f)
+                                        androidx.compose.foundation.layout.Box(modifier = Modifier.width(3.dp).fillMaxHeight(heightF.coerceAtLeast(0.01f)).clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)).background(Color(0xFF81D4FA)))
+                                    }
+                                }
+                            }
+                            // xAxis labels
+                            Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                listOf("Now", "10m", "20m", "30m", "40m", "50m").forEach { text ->
+                                    Text(text, color = Color.White.copy(alpha=0.6f), fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = if(text == "Now") TextAlign.Start else if(text == "50m") TextAlign.End else TextAlign.Center)
+                                }
                             }
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // ── 2-column grid: Humidity ────────────────
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                    // Empty spacer to maintain square ratio for Humidity
+                    Spacer(modifier = Modifier.weight(1f).aspectRatio(1f))
 
                     // Humidity
                     Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
@@ -540,7 +608,23 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                 Spacer(Modifier.height(12.dp))
 
                 // ── Location Map ──────────────────────────────────────────
-                if (data.lat != null && data.lon != null) {
+                if (data.location == "API Key Required") {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1E2F2B))) {
+                        Column(modifier = Modifier.align(Alignment.Center).padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("API Key required", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text("you need to configure your own api in settings.\nremove this widget in Widget Settings", color = Color.White, fontSize = 12.sp, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(16.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f)).padding(horizontal = 24.dp, vertical = 8.dp)) {
+                                    Text("Remove", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                                Box(modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF4B6F63)).padding(horizontal = 24.dp, vertical = 8.dp)) {
+                                    Text("Add API", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
+                } else if (data.lat != null && data.lon != null) {
                     val lat = data.lat
                     val lon = data.lon
                     val mapHtml = remember(lat, lon) { """
@@ -619,22 +703,60 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         }
                     }
 
-                    // Air Quality
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
-                        Column {
-                            WidgetLabel(Icons.Default.FilterDrama, "Air Quality")
-                            Spacer(Modifier.height(8.dp))
-                            val aqi = data.aqiValue ?: 0
-                            val aqiLabel = when (aqi) { 1 -> "Good"; 2 -> "Fair"; 3 -> "Moderate"; 4 -> "Poor"; 5 -> "Very Poor"; else -> "--" }
-                            val aqiColor = when (aqi) { 1 -> Color(0xFF66BB6A); 2 -> Color(0xFFFFEE58); 3 -> Color(0xFFFFA726); 4 -> Color(0xFFEF5350); else -> Color(0xFFAB47BC) }
-                            Text(aqiLabel, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text("AQI index $aqi/5", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                            Spacer(Modifier.weight(1f))
-                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                                listOf(Color(0xFF66BB6A), Color(0xFFFFEE58), Color(0xFFFFA726), Color(0xFFEF5350), Color(0xFFAB47BC)).forEachIndexed { i, c ->
-                                    val isFilled = i < aqi
-                                    Box(modifier = Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(50)).background(if (isFilled) c else Color.White.copy(alpha = 0.2f)))
-                                }
+                    // Empty spacer to balance Wind
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // ── Air Quality Full Width ────────────────────────────────
+                FullWidgetBox(icon = Icons.Default.FilterDrama, label = "Air Quality") {
+                    val aqi = data.aqiValue ?: 0
+                    val aqiLabel = when (aqi) { 1 -> "Good"; 2 -> "Fair"; 3 -> "Moderate"; 4 -> "Unhealthy for Sensitive Groups"; 5 -> "Very Poor"; else -> "--" }
+                    val aqiColor = when (aqi) { 1 -> Color(0xFF66BB6A); 2 -> Color(0xFFFFEE58); 3 -> Color(0xFFFFA726); 4 -> Color(0xFFEF5350); else -> Color(0xFFAB47BC) }
+                    val faceIcon = when(aqi) { 1, 2 -> Icons.Default.SentimentSatisfied; 3 -> Icons.Default.SentimentNeutral; 4, 5 -> Icons.Default.SentimentDissatisfied; else -> Icons.Default.QuestionMark }
+                    
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(faceIcon, contentDescription=null, tint=aqiColor, modifier=Modifier.size(48.dp))
+                        Spacer(Modifier.width(16.dp))
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(aqi.toString(), color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(8.dp))
+                            Text(aqiLabel, color = Color.White, fontSize = 13.sp, modifier=Modifier.padding(bottom=6.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text("Main Pollutant: Particulate Matter 2.5", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    Spacer(Modifier.height(4.dp))
+                    
+                    // Gradient bar
+                    Box(modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(Brush.horizontalGradient(listOf(Color(0xFF66BB6A), Color(0xFFFFEE58), Color(0xFFFFA726), Color(0xFFEF5350), Color(0xFFAB47BC))))) {
+                        val norm = ((aqi) / 5f).coerceIn(0f, 1f)
+                        Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(norm)) {
+                            Box(modifier = Modifier.align(Alignment.CenterEnd).size(8.dp, 12.dp).clip(RoundedCornerShape(50)).background(Color.White))
+                        }
+                    }
+                    
+                    Spacer(Modifier.height(20.dp))
+                    
+                    val ap = data.airPollution
+                    val cols = listOf(
+                        Triple("NO2", ap?.no2 ?: 0.0, Color(0xFFFFEE58)),
+                        Triple("O3", ap?.o3 ?: 0.0, Color(0xFF66BB6A)),
+                        Triple("PM10", ap?.pm10 ?: 0.0, Color(0xFFFFA726)),
+                        Triple("PM2_5", ap?.pm2_5 ?: 0.0, Color(0xFFEF5350)),
+                        Triple("CO", ap?.co ?: 0.0, Color(0xFF66BB6A)),
+                        Triple("SO2", ap?.so2 ?: 0.0, Color(0xFF66BB6A))
+                    )
+                    
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        cols.forEach { (name, value, col) ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Spacer(Modifier.height(4.dp))
+                                Box(modifier = Modifier.width(24.dp).height(2.dp).clip(RoundedCornerShape(50)).background(col))
+                                Spacer(Modifier.height(4.dp))
+                                Text(value.toInt().toString(), color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -863,6 +985,27 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                 Icon(Icons.Default.Navigation, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(10.dp).graphicsLayer { rotationZ = 45f })
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(text = updateText, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            }
+        }
+
+        // ── Pull refresh overlay ──────────────────────────────────────────
+        val refreshAlpha = (pullDownOffset / 150f).coerceIn(0f, 1f)
+        if (showRefreshText || pullDownOffset > 0f) {
+            Box(modifier = Modifier.fillMaxWidth().height(150.dp)
+                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha=0.7f * refreshAlpha), Color.Transparent)))
+            ) {
+                Row(modifier = Modifier.align(Alignment.TopCenter).offset(y = (pullDownOffset * 0.5f).dp.coerceAtMost(60.dp)), verticalAlignment = Alignment.CenterVertically) {
+                    if (isRefreshing) {
+                        androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("updating...", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        val rotation = if (pullDownOffset > 150f) 180f else 0f
+                        Icon(Icons.Default.ArrowDownward, contentDescription=null, tint=Color.White, modifier=Modifier.size(16.dp).graphicsLayer{ rotationZ = rotation })
+                        Spacer(Modifier.width(8.dp))
+                        Text("release to refresh", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
         }
 
