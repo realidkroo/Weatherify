@@ -1,2 +1,63 @@
-# Weatherify
-Open Source Weather App for Android
+# Weatherify 🌦️
+
+A high-performance Android weather application featuring a liquid-glass UI and a Rust-powered rendering engine for fluid animations.
+
+## Features
+- **Rust Rendering Engine**: High-performance backdrop animations using `wgpu`.
+- **Liquid Glass UI**: Fluid, physics-driven navigation and design.
+- **Modern Tech Stack**: Jetpack Compose, Kotlin Coroutines, and Rust JNI.
+
+## Prerequisites
+
+To compile this project, you will need:
+
+### 1. Android Development Environment
+- [Android Studio Iguana](https://developer.android.com/studio) or newer.
+- Android SDK 34.
+- Android NDK (installed via Android Studio SDK Manager).
+
+### 2. Rust Toolchain
+- [Rustup](https://rustup.rs/) (latest stable).
+- Android targets for Rust:
+  ```bash
+  rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+  ```
+- [cargo-ndk](https://github.com/bbqsrc/cargo-ndk):
+  ```bash
+  cargo install cargo-ndk
+  ```
+
+## Compilation Instructions
+
+### Step 1: Build the Rust Engine
+Navigate to the `rust_engine` directory and build the library for the desired Android architecture (usually `aarch64` for physical devices):
+
+```bash
+cd rust_engine
+cargo ndk -t arm64-v8a -o ../app/src/main/jniLibs build --release
+```
+
+*Note: This command compiles the Rust code into a `.so` library and places it in the correct Android project directory.*
+
+### Step 2: Build the Android App
+You can now build the app using Android Studio or the command line:
+
+```bash
+# From the project root
+./gradlew assembleDebug
+```
+
+### Step 3: Run the App
+- Connect an Android device or start an emulator.
+- Use Android Studio's **Run** button or:
+  ```bash
+  ./gradlew installDebug
+  ```
+
+## Project Structure
+- `app/`: Android application code (Kotlin/Compose).
+- `rust_engine/`: Native rendering engine source code (Rust).
+- `rust_engine/src/rendering/shaders/`: WGSL shaders for background effects.
+
+## License
+MIT

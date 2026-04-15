@@ -1,0 +1,39 @@
+# IDE - IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Android
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+local.properties
+.navigation/
+captures/
+*.ext.ap_
+*.apk
+*.ap_
+*.dex
+*.class
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+# .gradle should be ignored, but not the wrapper scripts
+# gradlew and gradlew.bat are desirable for common build tool usage
+
+# Rust / Cargo
+rust_engine/target/
+rust_engine/Cargo.lock
+
+# macOS
+.DS_Store
+
+# Temporary files
+*~
+*.swp
+*.log

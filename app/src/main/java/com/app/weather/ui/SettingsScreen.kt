@@ -1,0 +1,950 @@
+package com.app.weather.ui
+
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.RotateRight
+import androidx.compose.material.icons.automirrored.outlined.ShortText
+import androidx.compose.material.icons.automirrored.outlined.Subject
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.app.weather.R
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+enum class SubNavType { Push, Pop, Instant }
+
+@Composable
+fun SettingsScreen(
+    settings:            AppSettings,
+    currentMenu:         String,
+    onMenuChange:        (String) -> Unit,
+    onUpdateSettings:    (AppSettings) -> Unit,
+    onOpenOverlay:       (OverlayType) -> Unit,
+    onBack:              () -> Unit,
+    onSelectWeather:     (WeatherType) -> Unit = {}
+) {
+    val bgColor = Color(0xFF0D0D0D)
+    val cardBgColor = Color(0xFF1A1A1A)
+    var navType by remember { mutableStateOf(SubNavType.Push) }
+
+    var displayedTitle by remember { mutableStateOf(
+        when (currentMenu) { 
+            "DebugMenu" -> "Debug Menus"
+            "General" -> "General"
+            "Appearance" -> "Appearance"
+            else -> "Settings" 
+        }
+    ) }
+
+    LaunchedEffect(currentMenu, navType) {
+        val newTitle = when (currentMenu) { 
+            "DebugMenu" -> "Debug Menus"
+            "General" -> "General"
+            "Appearance" -> "Appearance"
+            else -> "Settings" 
+        }
+        displayedTitle = newTitle
+    }
+
+    val coroutineScope = rememberCoroutineScope()
+    val swipeOffset   = remember { Animatable(0f) }
+    var swipeBgMenu   by remember { mutableStateOf<String?>(null) }
+
+    val screenWidthPx = with(LocalDensity.current) {
+        LocalConfiguration.current.screenWidthDp.dp.toPx()
+    }
+
+    fun handleBack(requestedNavType: SubNavType = SubNavType.Pop) {
+        if (currentMenu != "Main") {
+            navType = requestedNavType
+            onMenuChange("Main")
+        } else {
+            onBack()
+        }
+    }
+
+    BackHandler(enabled = currentMenu != "Main") { handleBack(SubNavType.Pop) }
+
+    val mainListState       = rememberLazyListState()
+    val generalListState    = rememberLazyListState()
+    val appearanceListState = rememberLazyListState()
+    val debugListState      = rememberLazyListState()
+
+    @Composable
+    fun MenuList(menuState: String, state: LazyListState, scrollable: Boolean, modifier: Modifier = Modifier) {
+        LazyColumn(
+            state = state,
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 150.dp, bottom = 120.dp, start = 24.dp, end = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            userScrollEnabled = scrollable
+        ) {
+            when (menuState) {
+                "Main" -> {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(cardBgColor)
+                                .padding(horizontal = 20.dp, vertical = 16.dp)
+                        ) { Text("Find some settings...", color = Color.White.copy(alpha = 0.4f), fontSize = 16.sp) }
+                    }
+                    
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color(0xFF3B2323))
+                                .padding(vertical = 4.dp)
+                        ) {
+                            SettingsItemOverlay("Need permission", "Tap here to fix!", Icons.Outlined.WarningAmber, tint = Color(0xFFFF6B6B)) { onOpenOverlay(OverlayType.Permissions) }
+                        }
+                    }
+
+                    item {
+                        SettingsGroup {
+                            SettingsItemOverlay("General", "general settings", Icons.Outlined.Settings) { navType = SubNavType.Push; onMenuChange("General") }
+                            SettingsItemOverlay("Appearance", "appearance settings", Icons.Outlined.Palette) { navType = SubNavType.Push; onMenuChange("Appearance") }
+                            SettingsItemOverlay("Notifications", "notification settings", Icons.Outlined.Notifications) {}
+                            SettingsItemOverlay("Widgets", "widgets settings", Icons.Outlined.Widgets) {}
+                            SettingsItemOverlay("Provider selector", "OpenWeather, BMKG, or Google", Icons.Outlined.CloudQueue) { onOpenOverlay(OverlayType.Provider) }
+                            SettingsItemOverlay("Set your own API Keys", "if you prefer to not use our own api keys", Icons.Outlined.VpnKey) {}
+                            SettingsItemOverlay("Debug Menus", "well.. debug menus", Icons.Outlined.BugReport) { navType = SubNavType.Push; onMenuChange("DebugMenu") }
+                            SettingsItemOverlay("Language", "english", Icons.Outlined.Translate) {}
+                            SettingsItemOverlay("Credits", "made by roo, with <3", Icons.Outlined.Info) { onOpenOverlay(OverlayType.Credits) }
+                        }
+                    }
+                }
+                "General" -> {
+                    item {
+                        SettingsGroup {
+                            SettingsItemOverlay("Temperature unit", "C", Icons.Outlined.Thermostat) {}
+                            SettingsItemOverlay("Wind Speed unit", "Kilometers per hour ( Km/h )", Icons.Outlined.Air) {}
+                            SettingsItemOverlay("Pressure Unit", "inches of mercury", Icons.Outlined.Compress) {}
+                            SettingsItemOverlay("Visibility Unit", "Meters/kilometers", Icons.Outlined.Visibility) {}
+                            SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS. if disabled, the app will use default city.", Icons.Outlined.LocationOn, true) { }
+                        }
+                    }
+                }
+                "Appearance" -> {
+                    item {
+                        SettingsGroup {
+                            SettingsItemOverlay("Theme", settings.theme.name.lowercase(), Icons.Outlined.DarkMode) { onOpenOverlay(OverlayType.Theme) }
+                            SettingsItemOverlay("Customize Quote", "Quote for the weather", Icons.Outlined.FormatQuote) { onOpenOverlay(OverlayType.Quote) }
+                            SettingsItemOverlay("Customize Front page", "Quote for the front page", Icons.Outlined.Dashboard) { onOpenOverlay(OverlayType.Header) }
+                            SettingsItemOverlay("Icons", "select icons that will be used for the app", Icons.Outlined.AppShortcut) { onOpenOverlay(OverlayType.Icons) }
+                            SettingsItemOverlay("Customize Weather Widget", "Widget for the front page", Icons.Outlined.Widgets) {}
+                            SettingsSwitch("Haptics", "haptics for the app", Icons.Outlined.Vibration, settings.haptics) { onUpdateSettings(settings.copy(haptics = it)) }
+                            SettingsSwitch("Blur", "wide blur effects across the app", Icons.Outlined.BlurOn, settings.blur) { onUpdateSettings(settings.copy(blur = it)) }
+                            SettingsSwitch("Animation", "animation across the app", Icons.Outlined.Animation, settings.animation) { onUpdateSettings(settings.copy(animation = it)) }
+                            SettingsSwitch("FX", "FX across the app", Icons.Outlined.AutoAwesome, settings.fx) { onUpdateSettings(settings.copy(fx = it)) }
+                        }
+                    }
+                }
+                "DebugMenu" -> {
+                    item {
+                        SettingsGroup {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelectWeather(WeatherType.values().random()) }
+                                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Outlined.Shuffle, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Text("Cycle Random Weather", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+                            SettingsSwitch("Enable Clouds", "Volumetric procedural cloud layer", Icons.Outlined.FilterDrama, settings.enableClouds) { onUpdateSettings(settings.copy(enableClouds = it)) }
+                            SettingsSwitch("Rotate Wind Arrow", "Continously rotate the arrow on wind speed", Icons.AutoMirrored.Outlined.RotateRight, settings.debugRotateWindSpeed) { onUpdateSettings(settings.copy(debugRotateWindSpeed = it)) }
+                        }
+                    }
+                    
+                    item { Text("Force Weather State", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) }
+                    
+                    item {
+                        SettingsGroup {
+                            WeatherType.values().forEach { type ->
+                                SettingsItemOverlay(type.title, "force state", Icons.Outlined.Cloud) { onSelectWeather(type); handleBack(SubNavType.Pop) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val activeScrollState = when (currentMenu) {
+        "General" -> generalListState
+        "Appearance" -> appearanceListState
+        "DebugMenu" -> debugListState
+        else -> mainListState
+    }
+
+    val scrollOffset by remember(currentMenu) {
+        derivedStateOf {
+            if (activeScrollState.firstVisibleItemIndex == 0)
+                activeScrollState.firstVisibleItemScrollOffset.toFloat()
+            else 150f
+        }
+    }
+    
+    val headerProgress = (scrollOffset / 150f).coerceIn(0f, 1f)
+    val titleScale = 1f - 0.4f * headerProgress
+    
+    val maxTitleX = if (currentMenu == "Main") 0f else 52f
+    val titleX = (maxTitleX * headerProgress).dp
+    val titleY = (44f * (1f - headerProgress) - 8f * headerProgress).dp
+
+    Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
+        val internalGlassState = remember { GlassState() }
+
+        if (swipeOffset.value > 0f && swipeBgMenu != null) {
+            val parallaxX = (swipeOffset.value - screenWidthPx) * 0.3f
+            val internalBgGlassState = remember { GlassState() }
+
+            Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = parallaxX }) {
+                val bgScrollState = when (swipeBgMenu) {
+                    "General" -> generalListState
+                    "Appearance" -> appearanceListState
+                    "DebugMenu" -> debugListState
+                    else -> mainListState
+                }
+                
+                Box(modifier = Modifier.fillMaxSize().glassRoot(internalBgGlassState)) {
+                    MenuList(swipeBgMenu!!, bgScrollState, scrollable = false)
+                }
+
+                val bgScrollOffset = if (bgScrollState.firstVisibleItemIndex == 0) bgScrollState.firstVisibleItemScrollOffset.toFloat() else 150f
+                val bgHeaderProgress = (bgScrollOffset / 150f).coerceIn(0f, 1f)
+                val bgTitleScale = 1f - 0.4f * bgHeaderProgress
+                
+                val bgMaxTitleX = if (swipeBgMenu == "Main") 0f else 52f
+                val bgTitleX = (bgMaxTitleX * bgHeaderProgress).dp
+                val bgTitleY = (44f * (1f - bgHeaderProgress) - 8f * bgHeaderProgress).dp
+
+                Box(modifier = Modifier.fillMaxWidth().height(150.dp).clipToBounds()) {
+                    if (settings.blur) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height(40.dp))
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height(50.dp))
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height(50.dp))
+                        }
+                    }
+                    Box(modifier = Modifier.fillMaxSize().background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to bgColor.copy(alpha = if (settings.blur) 0.95f else 0.95f),
+                            0.5f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
+                            0.8f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
+                            1f to Color.Transparent
+                        )
+                    ))
+                    Box(modifier = Modifier.matchParentSize().padding(top = 56.dp, start = 24.dp, end = 24.dp)) {
+                        Text(
+                            text = when(swipeBgMenu) { "General" -> "General"; "Appearance" -> "Appearance"; "DebugMenu" -> "Debug Menus"; else -> "Settings" },
+                            color = Color.White, fontSize = 40.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.graphicsLayer {
+                                translationX = bgTitleX.toPx(); translationY = bgTitleY.toPx()
+                                scaleX = bgTitleScale; scaleY = bgTitleScale
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                            }
+                        )
+                    }
+                }
+
+                val shadowAlpha = 0.6f * (1f - (swipeOffset.value / screenWidthPx).coerceIn(0f, 1f))
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = shadowAlpha)))
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(swipeOffset.value.roundToInt(), 0) }
+                .background(bgColor)
+                .pointerInput(currentMenu) {
+                    if (currentMenu == "Main") return@pointerInput
+
+                    var dragAccumulator = 0f
+                    var isEdgeSwipe = false
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            dragAccumulator = 0f
+                            isEdgeSwipe = offset.x < 200f
+                            if (isEdgeSwipe) swipeBgMenu = "Main"
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            if (isEdgeSwipe) {
+                                change.consume()
+                                dragAccumulator += dragAmount
+                                if (dragAccumulator > 0f) {
+                                    coroutineScope.launch { swipeOffset.snapTo(dragAccumulator) }
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            if (isEdgeSwipe) {
+                                coroutineScope.launch {
+                                    if (dragAccumulator > 150f) {
+                                        swipeOffset.animateTo(screenWidthPx, tween(200, easing = LinearEasing))
+                                        navType = SubNavType.Instant
+                                        onMenuChange("Main")
+                                        delay(32)
+                                        swipeOffset.snapTo(0f)
+                                        swipeBgMenu = null
+                                    } else {
+                                        swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                        swipeBgMenu = null
+                                    }
+                                }
+                            }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                swipeBgMenu = null
+                            }
+                        }
+                    )
+                }
+        ) {
+            Box(modifier = Modifier.fillMaxSize().glassRoot(internalGlassState)) {
+                AnimatedContent(
+                    targetState = currentMenu,
+                    label       = "SettingsMenuBase",
+                    modifier    = Modifier.fillMaxSize(),
+                    transitionSpec = {
+                        when (navType) {
+                            SubNavType.Push -> (slideInHorizontally(spring(stiffness = 350f, dampingRatio = 0.85f)) { it } + fadeIn(tween(250))) togetherWith
+                                              (slideOutHorizontally(spring(stiffness = 350f, dampingRatio = 0.85f)) { -it / 3 } + fadeOut(tween(250)))
+                            SubNavType.Pop  -> (slideInHorizontally(spring(stiffness = 350f, dampingRatio = 0.85f)) { -it / 3 } + fadeIn(tween(250))) togetherWith
+                                              (slideOutHorizontally(spring(stiffness = 350f, dampingRatio = 0.85f)) { it } + fadeOut(tween(250)))
+                            SubNavType.Instant -> EnterTransition.None togetherWith ExitTransition.None
+                        }
+                    }
+                ) { menuState ->
+                    val state = when(menuState) { "General" -> generalListState; "Appearance" -> appearanceListState; "DebugMenu" -> debugListState; else -> mainListState }
+                    MenuList(menuState, state, scrollable = true)
+                }
+            }
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .clipToBounds()
+            ) {
+                if (settings.blur) {
+                    Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f)) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            GlassPillBackground(state = internalGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height(40.dp))
+                            GlassPillBackground(state = internalGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height(50.dp))
+                            GlassPillBackground(state = internalGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height(50.dp))
+                        }
+                    }
+                }
+                Box(modifier = Modifier.fillMaxSize().background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        0f to bgColor.copy(alpha = if (settings.blur) 0.95f else 0.95f),
+                        0.5f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
+                        0.8f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
+                        1f to Color.Transparent
+                    )
+                ))
+
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .padding(top = 56.dp, start = 24.dp, end = 24.dp)
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = currentMenu != "Main",
+                        enter = fadeIn() + scaleIn(initialScale = 0.7f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.7f),
+                        modifier = Modifier.align(Alignment.TopStart)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.1f))
+                                .clickable { handleBack(SubNavType.Pop) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                    }
+
+                    key(navType) {
+                        AnimatedContent(
+                            targetState = displayedTitle,
+                            label = "TitleTransition",
+                            modifier = Modifier.graphicsLayer {
+                                translationX  = titleX.toPx()
+                                translationY  = titleY.toPx()
+                                scaleX        = titleScale
+                                scaleY        = titleScale
+                                transformOrigin = TransformOrigin(0f, 0.5f)
+                            },
+                            transitionSpec = {
+                                if (navType == SubNavType.Instant || navType == SubNavType.Pop) {
+                                    EnterTransition.None togetherWith ExitTransition.None
+                                } else {
+                                    (slideInVertically(spring(stiffness = 300f)) { it } + fadeIn(tween(250))) togetherWith
+                                    (slideOutVertically(spring(stiffness = 300f)) { -it } + fadeOut(tween(250)))
+                                }
+                            }
+                        ) { title ->
+                            Text(
+                                text = title,
+                                color = Color.White,
+                                fontSize = 40.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsGroup(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xFF1A1A1A))
+            .padding(vertical = 8.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint: Color = Color.White, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column {
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(subtitle, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsSwitch(title: String, subtitle: String, icon: ImageVector, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.padding(end = 16.dp)) {
+                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                if (subtitle.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(subtitle, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, lineHeight = 16.sp)
+                }
+            }
+        }
+        Switch(
+            checked = checked, onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color.DarkGray)
+        )
+    }
+}
+
+@Composable
+fun WidgetPill(icon: ImageVector, text: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(0.15f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun HeaderTypeSelectionContent(settings: AppSettings, onSelect: (HeaderType) -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.71f) // Just short enough to leave the primary overlay's handle visible
+            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .background(Color(0xFF141414))
+            .padding(bottom = 60.dp, top = 16.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Headers type", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HeaderGridCard("Location", isSelected = settings.headerType == HeaderType.Standard, Modifier.weight(1f)) { onSelect(HeaderType.Standard) }
+                HeaderGridCard("weather type", isSelected = settings.headerType == HeaderType.Greeting, Modifier.weight(1f)) { onSelect(HeaderType.Greeting) }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HeaderGridCard("Feels like", isSelected = settings.headerType == HeaderType.FeelsLike, Modifier.weight(1f)) { onSelect(HeaderType.FeelsLike) }
+                HeaderGridCard("disabled", isSelected = settings.headerType == HeaderType.Disabled, Modifier.weight(1f)) { onSelect(HeaderType.Disabled) }
+            }
+        }
+    }
+}
+
+@Composable
+fun OverlayContent(
+    overlayType: OverlayType, 
+    settings: AppSettings, 
+    onUpdateSettings: (AppSettings) -> Unit, 
+    onOpenNested: (NestedOverlay) -> Unit
+) {
+    val context = LocalContext.current
+    
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.76f) // 3.8/5 screen height
+            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .background(Color(0xFF141414))
+            .padding(bottom = 60.dp, top = 16.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+            Box(modifier = Modifier.width(40.dp).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.3f)).align(Alignment.CenterHorizontally))
+            Spacer(modifier = Modifier.height(32.dp))
+
+            when (overlayType) {
+                OverlayType.Theme -> {
+                    Icon(Icons.Outlined.Palette, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Theme", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("select theme that will be used across the app.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ThemeCard("Light theme", Icons.Outlined.LightMode, settings.theme == AppTheme.Light) { onUpdateSettings(settings.copy(theme = AppTheme.Light)) }
+                        ThemeCard("dark theme", Icons.Outlined.DarkMode, settings.theme == AppTheme.Dark) { onUpdateSettings(settings.copy(theme = AppTheme.Dark)) }
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    ThemeCard("Auto by system", Icons.Outlined.BrightnessAuto, settings.theme == AppTheme.Auto) { onUpdateSettings(settings.copy(theme = AppTheme.Auto)) }
+                }
+                OverlayType.Quote -> {
+                    Icon(Icons.Outlined.FormatQuote, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Quote", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("The quote will be displayed for the weather.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(32.dp))
+                    QuoteCard("Compact. short", "it feels like 21°C today,\nRaining until 10 PM. beware of flood", Icons.AutoMirrored.Outlined.ShortText, settings.quoteStyle == QuoteStyle.Compact) { onUpdateSettings(settings.copy(quoteStyle = QuoteStyle.Compact)) }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    QuoteCard("Summary", "its overcast and cloudy. broken clouds \non jakarta. visibility is 10km. the \ntemp feels like 21°C, quite \nhot. today rain probality is high", Icons.AutoMirrored.Outlined.Subject, settings.quoteStyle == QuoteStyle.Summary) { onUpdateSettings(settings.copy(quoteStyle = QuoteStyle.Summary)) }
+                }
+                OverlayType.Header -> {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Box(modifier = Modifier.size(24.dp).clip(CircleShape).background(Color.White))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Front page customisation", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(48.dp))
+                    
+                    val typeName = when(settings.headerType) {
+                        HeaderType.Standard -> "Location"
+                        HeaderType.Greeting -> "weather type"
+                        HeaderType.FeelsLike -> "Feels like"
+                        HeaderType.Sunrise -> "Sunrise"
+                        HeaderType.Disabled -> "disabled"
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, Color.White.copy(0.3f), RoundedCornerShape(50))
+                            .clickable { onOpenNested(NestedOverlay.HeaderTypeSelection) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(typeName, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(48.dp))
+                    
+                    // Fixed: __o with bottom alignment
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(Color.White))
+                            Box(modifier = Modifier.width(60.dp).height(12.dp).background(Color.White))
+                        }
+                        Spacer(modifier = Modifier.width(24.dp))
+                        Box(modifier = Modifier.size(48.dp).border(8.dp, Color.White, CircleShape))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(48.dp))
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(modifier = Modifier.width(30.dp).height(4.dp).background(Color.White.copy(0.5f)))
+                        Box(modifier = Modifier.width(100.dp).height(4.dp).background(Color.White.copy(0.5f)))
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Box(modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(0.2f), RoundedCornerShape(20.dp)).padding(16.dp)) {
+                        Column {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                WidgetPill(Icons.Outlined.FilterDrama, "AQI")
+                                WidgetPill(Icons.Outlined.Air, "km/h")
+                                WidgetPill(Icons.Outlined.Visibility, "km")
+                                WidgetPill(Icons.Outlined.WaterDrop, "%")
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(24.dp).background(Color.White.copy(0.2f), CircleShape), contentAlignment = Alignment.Center) {
+                                    Text("+", color = Color.White, fontSize = 14.sp)
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Hold the widget for 4s to remove, drag to change position", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+                OverlayType.Icons -> {
+                    Icon(Icons.Outlined.AppShortcut, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Icons", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("select icons that will be used for the app", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        AppIconCard("Light", R.drawable.iconslight, settings.appIcon == AppIcon.Day) { onUpdateSettings(settings.copy(appIcon = AppIcon.Day)) }
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text("or", color = Color.White.copy(alpha = 0.6f), fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        AppIconCard("Dark", R.drawable.iconsdark, settings.appIcon == AppIcon.NightFullMoon) { onUpdateSettings(settings.copy(appIcon = AppIcon.NightFullMoon)) }
+                        AppIconCard("Moon", R.drawable.iconsmoon, settings.appIcon == AppIcon.NightMoon) { onUpdateSettings(settings.copy(appIcon = AppIcon.NightMoon)) }
+                    }
+                }
+                OverlayType.Permissions -> {
+                    Icon(Icons.Outlined.VpnKey, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Permission", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("The app need these to work", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(24.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("3/5", color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("permission are granted.", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    val reqPerm = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                        intent.data = Uri.fromParts("package", context.packageName, null)
+                        context.startActivity(intent)
+                    }
+                    
+                    SettingsItemOverlay("Location", "", Icons.Outlined.LocationOn, Color.White) { reqPerm() }
+                    SettingsItemOverlay("background services", "", Icons.Outlined.SettingsSuggest, Color.White) { reqPerm() }
+                    SettingsItemOverlay("Battery Optimisation", "", Icons.Outlined.BatteryAlert, Color.White) { reqPerm() }
+                    SettingsItemOverlay("Networks", "", Icons.Outlined.Wifi, Color.White) { reqPerm() }
+                    SettingsItemOverlay("Notifications", "", Icons.Outlined.Notifications, Color.White) { reqPerm() }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("We wont collect and store ANY data you given to us. the app only collect location data ( if permitted ) and ip address to display accurate location of the current weather. we will never collect and STORE any data.", color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp, lineHeight = 14.sp)
+                }
+                OverlayType.Credits -> {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                        Box(
+                            modifier = Modifier.size(100.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFFB5D0FF)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Outlined.Cloud, contentDescription = null, tint = Color.White, modifier = Modifier.size(50.dp))
+                        }
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Weatherify", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        Box(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(24.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFD9D9D9)))
+                                Spacer(modifier = Modifier.width(20.dp))
+                                Column {
+                                    Text("BUILD 0.28", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
+                                    Text("Release-DEV-02", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(20.dp)) {
+                                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                                    Image(
+                                        painter = painterResource(id = R.drawable.profile_pic),
+                                        contentDescription = "Profile Picture",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(56.dp).clip(CircleShape)
+                                    )
+                                    Text("Made by idkroo\nwith <3", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+
+                            Box(modifier = Modifier.weight(1f).height(180.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF1A1A1A)).padding(20.dp)) {
+                                Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                                    Text("this app is\nopen source.\nforever yours.", color = Color.White, fontSize = 14.sp, fontFamily = FontFamily.Monospace, lineHeight = 20.sp)
+                                    Box(modifier = Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFD9D9D9)), contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Outlined.FavoriteBorder, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CreditLinkItem("@realidkroo", Icons.Outlined.Link)
+                            CreditLinkItem("@realidkroo", Icons.Outlined.Code)
+                            CreditLinkItem("Visit this app repo", Icons.Outlined.Code)
+                        }
+                    }
+                }
+                OverlayType.Provider -> {
+                    Icon(Icons.Outlined.CloudQueue, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+                    Text("Weather Provider", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text("Select the weather provider for the app.", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    ProviderCard("OpenWeather", "Global coverage", Icons.Outlined.Language, settings.provider == "OpenWeather") { 
+                        onUpdateSettings(settings.copy(provider = "OpenWeather"))
+                        WeatherBackend.setProvider("OpenWeather")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ProviderCard("BMKG", "Indonesia only", Icons.Outlined.Map, settings.provider == "BMKG") { 
+                        onUpdateSettings(settings.copy(provider = "BMKG"))
+                        WeatherBackend.setProvider("BMKG")
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ProviderCard("Google Weather API", "Global coverage", Icons.Outlined.CloudCircle, settings.provider == "Google") { 
+                        onUpdateSettings(settings.copy(provider = "Google"))
+                        WeatherBackend.setProvider("Google")
+                    }
+                }
+                OverlayType.None -> {}
+            }
+        }
+    }
+}
+
+@Composable
+fun AppIconCard(title: String, drawableId: Int, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(150.dp).height(120.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Image(
+            painter = painterResource(id = drawableId),
+            contentDescription = null,
+            modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).align(Alignment.TopStart)
+        )
+        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+    }
+}
+
+@Composable
+fun ThemeCard(title: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .width(150.dp).height(120.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)).align(Alignment.TopStart), contentAlignment = Alignment.Center) {
+            Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+    }
+}
+
+@Composable
+fun QuoteCard(title: String, preview: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(24.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
+                    Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(preview, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+fun HeaderGridCard(title: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) Color.White.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Box(
+            modifier = Modifier.size(48.dp).clip(CircleShape).background(Color(0xFFD9D9D9)).align(Alignment.TopStart)
+        )
+        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.BottomStart))
+    }
+}
+
+@Composable
+fun CreditLinkItem(text: String, icon: ImageVector) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(50))
+            .background(Color(0xFF1A1A1A))
+            .clickable { /* Handle click */ }
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(Color(0xFFD9D9D9)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(text, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+fun ProviderCard(title: String, subtitle: String, icon: ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(if (isSelected) Color.White.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.05f))
+            .clickable { onClick() }
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color(0xFF2A2A2A)), contentAlignment = Alignment.Center) {
+                Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+            }
+        }
+    }
+}

@@ -1,0 +1,13 @@
+R_DEF: Internal format may change without notice
+local
+drawable cloud_layer
+drawable ic_launcher_background
+drawable ic_launcher_foreground
+drawable iconsdark
+drawable iconslight
+drawable iconsmoon
+drawable profile_pic
+mipmap ic_launcher
+style Theme.WeatherApp
+xml backup_rules
+xml data_extraction_rules
