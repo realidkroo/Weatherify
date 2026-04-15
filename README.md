@@ -1,4 +1,4 @@
-##weatherify
+# weatherify
 open source android weather app, but with style i guess
 ## THIS thing is not done yet please wait
 
