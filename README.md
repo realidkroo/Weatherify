@@ -1,14 +1,3 @@
-# Weatherify 🌦️
-
-A high-performance Android weather application featuring a liquid-glass UI and a Rust-powered rendering engine for fluid animations.
-
-## Features
-- **Rust Rendering Engine**: High-performance backdrop animations using `wgpu`.
-- **Liquid Glass UI**: Fluid, physics-driven navigation and design.
-- **Modern Tech Stack**: Jetpack Compose, Kotlin Coroutines, and Rust JNI.
-
-## Prerequisites
-
 To compile this project, you will need:
 
 ### 1. Android Development Environment
@@ -27,9 +16,9 @@ To compile this project, you will need:
   cargo install cargo-ndk
   ```
 
-## Compilation Instructions
+## how to compile
 
-### Step 1: Build the Rust Engine
+### 1: Build the Rust Engine
 Navigate to the `rust_engine` directory and build the library for the desired Android architecture (usually `aarch64` for physical devices):
 
 ```bash
@@ -39,7 +28,7 @@ cargo ndk -t arm64-v8a -o ../app/src/main/jniLibs build --release
 
 *Note: This command compiles the Rust code into a `.so` library and places it in the correct Android project directory.*
 
-### Step 2: Build the Android App
+### 2: Build the Android App
 You can now build the app using Android Studio or the command line:
 
 ```bash
@@ -48,16 +37,13 @@ You can now build the app using Android Studio or the command line:
 ```
 
 ### Step 3: Run the App
-- Connect an Android device or start an emulator.
-- Use Android Studio's **Run** button or:
+- Connect an android device or start an emulator.
+- Use Android Studio's **run** button or:
   ```bash
   ./gradlew installDebug
   ```
 
-## Project Structure
+## project structure
 - `app/`: Android application code (Kotlin/Compose).
 - `rust_engine/`: Native rendering engine source code (Rust).
-- `rust_engine/src/rendering/shaders/`: WGSL shaders for background effects.
-
-## License
-MIT
+- `rust_engine/src/rendering/shaders/`: WGSL shaders for background effects.unused for now its so heavy
