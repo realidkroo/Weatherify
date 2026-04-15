@@ -1,3 +1,8 @@
+#weatherify
+open source android weather app, but with style i guess
+## THIS thing is not done yet please wait
+
+Try it on release if there any, or clone this project and compile itt
 To compile this project, you will need:
 
 ### 1. Android Development Environment
