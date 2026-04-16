@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -29,7 +30,7 @@ fun SearchScreen(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0C18)) 
+            .background(MaterialTheme.colorScheme.background) 
             .padding(top = 64.dp, start = 24.dp, end = 24.dp)
     ) {
         // Top Action Bar
@@ -41,21 +42,21 @@ fun SearchScreen(onBack: () -> Unit) {
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(percent = 50))
-                    .background(Color.White.copy(alpha = 0.05f))
+                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f))
                     .clickable { onBack() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = "Back",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.size(20.dp)
                 )
             }
             Spacer(modifier = Modifier.width(16.dp))
             Text(
                 text = "Search",
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -68,7 +69,7 @@ fun SearchScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White.copy(alpha = 0.07f))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(horizontal = 24.dp, vertical = 12.dp), // Reduced vertical padding
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -76,7 +77,7 @@ fun SearchScreen(onBack: () -> Unit) {
             Icon(
                 imageVector    = Icons.Default.Search,
                 contentDescription = null,
-                tint           = Color.White.copy(alpha = 0.35f),
+                tint           = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                 modifier       = Modifier.size(20.dp)
             )
             BasicTextField(
@@ -84,7 +85,7 @@ fun SearchScreen(onBack: () -> Unit) {
                 onValueChange = { query = it },
                 singleLine    = true,
                 textStyle     = TextStyle(
-                    color      = Color.White,
+                    color      = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize   = 18.sp,
                     fontWeight = FontWeight.Medium
                 ),
@@ -92,7 +93,7 @@ fun SearchScreen(onBack: () -> Unit) {
                     if (query.text.isEmpty()) {
                         Text(
                             text       = "City, zip code…",
-                            color      = Color.White.copy(alpha = 0.3f),
+                            color      = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                             fontSize   = 18.sp,
                             fontWeight = FontWeight.Medium
                         )

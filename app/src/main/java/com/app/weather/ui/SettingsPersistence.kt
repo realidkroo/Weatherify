@@ -11,6 +11,7 @@ object SettingsPersistence {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val json = JSONObject().apply {
             put("theme", settings.theme.name)
+            put("monet", settings.monet)
             put("haptics", settings.haptics)
             put("blur", settings.blur)
             put("animation", settings.animation)
@@ -35,6 +36,7 @@ object SettingsPersistence {
             val json = JSONObject(jsonStr)
             AppSettings(
                 theme = AppTheme.valueOf(json.optString("theme", AppTheme.Dark.name)),
+                monet = json.optBoolean("monet", false),
                 haptics = json.optBoolean("haptics", true),
                 blur = json.optBoolean("blur", true),
                 animation = json.optBoolean("animation", true),

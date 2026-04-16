@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.rememberScrollableState
 import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -21,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -168,7 +170,7 @@ private fun WidgetTile(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .padding(16.dp)
     ) { Column(modifier = Modifier.fillMaxSize(), content = content) }
 }
@@ -176,9 +178,20 @@ private fun WidgetTile(
 @Composable
 private fun WidgetLabel(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(12.dp))
+        Icon(
+            imageVector = icon, 
+            contentDescription = null, 
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), 
+            modifier = Modifier.size(12.dp)
+        )
         Spacer(Modifier.width(4.dp))
-        Text(label.uppercase(), color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+        Text(
+            text = label.uppercase(), 
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f), 
+            fontSize = 10.sp, 
+            fontWeight = FontWeight.SemiBold, 
+            letterSpacing = 0.8.sp
+        )
     }
 }
 
@@ -191,7 +204,7 @@ private fun FullWidgetBox(
     Box(
         modifier = Modifier.fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.15f))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .padding(16.dp)
     ) {
         Column {
@@ -280,6 +293,9 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
             }
         }
     }
+
+    val contentColor = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.onBackground
+    val secondaryContentColor = contentColor.copy(alpha = 0.7f)
 
     val headerProgress = (scrollOffset / 800f).coerceIn(0f, 1f)
     val smoothProgress by animateFloatAsState(targetValue = headerProgress, animationSpec = spring(dampingRatio = 0.75f, stiffness = 200f), label = "")
@@ -430,12 +446,12 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     Icon(
                         Icons.Default.Refresh,
                         contentDescription = "Refresh",
-                        tint = Color.White,
+                        tint = contentColor,
                         modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = iconRotation }
                     )
                     Text(
                         text = refreshText,
-                        color = Color.White,
+                        color = contentColor,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -477,7 +493,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
             }
 
             Column(modifier = Modifier.fillMaxWidth().offset(y = contentBlockY).padding(horizontal = 32.dp).alpha(contentBlockAlpha).blur(if (settings.blur) contentBlockBlur else 0.dp)) {
-                Text(text = dynamicQuote, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
+                Text(text = dynamicQuote, color = contentColor.copy(alpha = 0.8f), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(24.dp))
                 
                 // Smaller pill spacing (4.dp)
@@ -486,10 +502,10 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     val windRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(animation = tween(2000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
                     val metrics = listOf(Pair(Icons.Default.FilterDrama, data.aqi), Pair(Icons.Default.NorthEast, data.wind), Pair(Icons.Default.Visibility, data.visibility), Pair(Icons.Default.WaterDrop, data.humidity))
                     metrics.forEach { (icon, label) ->
-                        Row(modifier = Modifier.clip(RoundedCornerShape(percent = 50)).background(Color.White.copy(alpha = 0.15f)).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = windRotation })
+                        Row(modifier = Modifier.clip(RoundedCornerShape(percent = 50)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(imageVector = icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = windRotation })
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(text = label, color = contentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
@@ -505,7 +521,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
 
             val widgetYBase = (680f - 500f * smoothProgress).dp
             val widgetY = widgetYBase - excessDp
-            val widgetBg = remember { Color.White.copy(alpha = 0.15f) }
+            val widgetBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
 
             val mapToIcon = remember { { t: WeatherType ->
                 when (t) {
@@ -522,11 +538,11 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         data.hourlyForecast.forEach { item ->
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(mapToIcon(item.type), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                Icon(mapToIcon(item.type), contentDescription = null, tint = contentColor, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.height(6.dp))
-                                Text(item.temp, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text(item.temp, color = contentColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                                 Spacer(Modifier.height(2.dp))
-                                Text(item.time, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                                Text(item.time, color = secondaryContentColor, fontSize = 11.sp)
                             }
                         }
                     }
@@ -538,17 +554,17 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         data.dailyForecast.forEach { item ->
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                                Text(item.day, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1.4f))
-                                Icon(mapToIcon(item.type), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Text(item.day, color = contentColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1.4f))
+                                Icon(mapToIcon(item.type), contentDescription = null, tint = contentColor, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.weight(0.5f))
-                                Text(item.tempMin, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(item.tempMin, color = secondaryContentColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.width(8.dp))
-                                Box(modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+                                Box(modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(50)).background(contentColor.copy(alpha = 0.2f))) {
                                     val pop = item.pop / 100f
-                                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(pop.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.7f)))
+                                    Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(pop.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(50)).background(contentColor.copy(alpha = 0.7f)))
                                 }
                                 Spacer(Modifier.width(8.dp))
-                                Text(item.temp, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.width(36.dp))
+                                Text(item.temp, color = contentColor, fontSize = 14.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.width(36.dp))
                             }
                         }
                     }
@@ -562,11 +578,11 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                             WidgetLabel(Icons.Default.WaterDrop, "Precipitation")
                             Spacer(Modifier.height(8.dp))
                             val precipMm = data.rainfallNext24h ?: 0.0
-                            Text("${String.format("%.1f", precipMm)} mm", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text("expected today", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            Text("${String.format("%.1f", precipMm)} mm", color = contentColor, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("expected today", color = secondaryContentColor, fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
                             val frac = (precipMm / 50.0).coerceIn(0.0, 1.0).toFloat()
-                            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+                            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(contentColor.copy(alpha = 0.2f))) {
                                 Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(frac.coerceAtLeast(0.03f)).clip(RoundedCornerShape(50)).background(Color(0xFF81D4FA)))
                             }
                         }
@@ -577,15 +593,15 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                             WidgetLabel(Icons.Default.WaterDrop, "Humidity")
                             Spacer(Modifier.height(8.dp))
                             val hVal = data.humidityValue ?: 0
-                            Text("${hVal}%", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("${hVal}%", color = contentColor, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                             Text(when {
                                 hVal > 80 -> "Very humid"
                                 hVal > 60 -> "Humid"
                                 hVal > 40 -> "Comfortable"
                                 else      -> "Dry"
-                            }, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            }, color = secondaryContentColor, fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
-                            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+                            Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(contentColor.copy(alpha = 0.2f))) {
                                 Box(modifier = Modifier.fillMaxHeight().fillMaxWidth((hVal / 100f).coerceAtLeast(0.03f)).clip(RoundedCornerShape(50)).background(Color(0xFF4FC3F7)))
                             }
                         }
@@ -599,9 +615,9 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         Column {
                             WidgetLabel(Icons.Default.DeviceThermostat, "Feels like")
                             Spacer(Modifier.height(8.dp))
-                            Text("${data.feelsLike ?: "__"}°", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold)
+                            Text("${data.feelsLike ?: "__"}°", color = contentColor, fontSize = 38.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.weight(1f))
-                            Text(data.feelsLikeDesc, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp)
+                            Text(data.feelsLikeDesc, color = secondaryContentColor, fontSize = 12.sp)
                         }
                     }
 
@@ -610,7 +626,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                             WidgetLabel(Icons.Default.WbSunny, "UV Index")
                             Spacer(Modifier.height(8.dp))
                             val uv = data.uvIndex
-                            Text(if (uv != null) String.format("%.1f", uv) else "__", color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold)
+                            Text(if (uv != null) String.format("%.1f", uv) else "__", color = contentColor, fontSize = 38.sp, fontWeight = FontWeight.Bold)
                             Text(when {
                                 uv == null  -> "--"
                                 uv < 3      -> "Low"
@@ -618,7 +634,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                                 uv < 8      -> "High"
                                 uv < 11     -> "Very High"
                                 else        -> "Extreme"
-                            }, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            }, color = secondaryContentColor, fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
                             if (uv != null) {
                                 val frac = (uv / 12.0).coerceIn(0.0, 1.0).toFloat()
@@ -629,7 +645,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                                     uv < 11 -> Color(0xFFEF5350)
                                     else    -> Color(0xFFAB47BC)
                                 }
-                                Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
+                                Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(contentColor.copy(alpha = 0.2f))) {
                                     Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(frac.coerceAtLeast(0.03f)).clip(RoundedCornerShape(50)).background(uvColor))
                                 }
                             }
@@ -692,21 +708,21 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                                 val cx = size.width / 2
                                 val cy = size.height / 2
                                 val r = size.width / 2 - 4.dp.toPx()
-                                drawCircle(color = Color.White.copy(alpha = 0.15f), radius = r)
+                                drawCircle(color = contentColor.copy(alpha = 0.15f), radius = r)
                                 for (d in 0..315 step 45) {
                                     val rd = Math.toRadians(d.toDouble())
                                     val px = cx + (r - 6.dp.toPx()) * sin(rd).toFloat()
                                     val py = cy - (r - 6.dp.toPx()) * cos(rd).toFloat()
-                                    drawCircle(color = Color.White.copy(alpha = 0.4f), radius = 2.dp.toPx(), center = Offset(px, py))
+                                    drawCircle(color = contentColor.copy(alpha = 0.4f), radius = 2.dp.toPx(), center = Offset(px, py))
                                 }
                                 val rad = Math.toRadians(deg.toDouble())
                                 val tip = Offset(cx + (r - 8.dp.toPx()) * sin(rad).toFloat(), cy - (r - 8.dp.toPx()) * cos(rad).toFloat())
                                 val tail = Offset(cx - 20.dp.toPx() * sin(rad).toFloat(), cy + 20.dp.toPx() * cos(rad).toFloat())
-                                drawLine(Color.White, tail, tip, strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                drawLine(contentColor, tail, tip, strokeWidth = 2.5f, cap = StrokeCap.Round)
                                 drawCircle(Color(0xFF4FC3F7), radius = 4.dp.toPx(), center = tip)
                             }
-                            Text(data.wind, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                            if (data.windGust != "--") Text("Gust: ${data.windGust}", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
+                            Text(data.wind, color = contentColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            if (data.windGust != "--") Text("Gust: ${data.windGust}", color = secondaryContentColor, fontSize = 11.sp)
                         }
                     }
 
@@ -717,13 +733,13 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                             val aqi = data.aqiValue ?: 0
                             val aqiLabel = when (aqi) { 1 -> "Good"; 2 -> "Fair"; 3 -> "Moderate"; 4 -> "Poor"; 5 -> "Very Poor"; else -> "--" }
                             val aqiColor = when (aqi) { 1 -> Color(0xFF66BB6A); 2 -> Color(0xFFFFEE58); 3 -> Color(0xFFFFA726); 4 -> Color(0xFFEF5350); else -> Color(0xFFAB47BC) }
-                            Text(aqiLabel, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                            Text("AQI index $aqi/5", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            Text(aqiLabel, color = contentColor, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text("AQI index $aqi/5", color = secondaryContentColor, fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                                 listOf(Color(0xFF66BB6A), Color(0xFFFFEE58), Color(0xFFFFA726), Color(0xFFEF5350), Color(0xFFAB47BC)).forEachIndexed { i, c ->
                                     val isFilled = i < aqi
-                                    Box(modifier = Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(50)).background(if (isFilled) c else Color.White.copy(alpha = 0.2f)))
+                                    Box(modifier = Modifier.weight(1f).height(5.dp).clip(RoundedCornerShape(50)).background(if (isFilled) c else contentColor.copy(alpha = 0.2f)))
                                 }
                             }
                         }
@@ -737,7 +753,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         Column {
                             WidgetLabel(Icons.Default.Visibility, "Visibility")
                             Spacer(Modifier.height(8.dp))
-                            Text(data.visibility, color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                            Text(data.visibility, color = contentColor, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.weight(1f))
                             val visKm = data.visibilityM?.div(1000) ?: 0
                             Text(when {
@@ -745,7 +761,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                                 visKm >= 5  -> "Mostly clear"
                                 visKm >= 2  -> "Light haze"
                                 else        -> "Dense fog"
-                            }, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                            }, color = secondaryContentColor, fontSize = 12.sp)
                         }
                     }
 
@@ -762,19 +778,19 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                                     val inner = r - 8.dp.toPx()
                                     val px1 = cx + inner * cos(ang).toFloat(); val py1 = cy + inner * sin(ang).toFloat()
                                     val px2 = cx + r * cos(ang).toFloat(); val py2 = cy + r * sin(ang).toFloat()
-                                    drawLine(Color.White.copy(alpha = 0.3f), Offset(px1, py1), Offset(px2, py2), strokeWidth = 1.5f)
+                                    drawLine(contentColor.copy(alpha = 0.3f), Offset(px1, py1), Offset(px2, py2), strokeWidth = 1.5f)
                                 }
                                 val norm = ((pHpa - 950) / 100f).coerceIn(0f, 1f)
                                 val needleAng = Math.toRadians(180.0 + norm * 180.0)
                                 val nx = cx + (r - 10.dp.toPx()) * cos(needleAng).toFloat()
                                 val ny = cy + (r - 10.dp.toPx()) * sin(needleAng).toFloat()
-                                drawLine(Color.White, Offset(cx, cy), Offset(nx, ny), strokeWidth = 2.5f, cap = StrokeCap.Round)
+                                drawLine(contentColor, Offset(cx, cy), Offset(nx, ny), strokeWidth = 2.5f, cap = StrokeCap.Round)
                                 drawCircle(Color(0xFF4FC3F7), radius = 4.dp.toPx(), center = Offset(cx, cy))
                             }
-                            Text("$pHpa hPa", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("$pHpa hPa", color = contentColor, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Low", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
-                                Text("High", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                                Text("Low", color = secondaryContentColor, fontSize = 10.sp)
+                                Text("High", color = secondaryContentColor, fontSize = 10.sp)
                             }
                         }
                     }
@@ -799,7 +815,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         val dashW = 6.dp.toPx(); val gapW = 4.dp.toPx()
                         var x = arcLeft
                         while (x < arcRight) {
-                            drawLine(Color.White.copy(alpha = 0.25f), Offset(x, h - 20.dp.toPx()), Offset(x + dashW, h - 20.dp.toPx()), strokeWidth = 1.5f)
+                            drawLine(contentColor.copy(alpha = 0.25f), Offset(x, h - 20.dp.toPx()), Offset(x + dashW, h - 20.dp.toPx()), strokeWidth = 1.5f)
                             x += dashW + gapW
                         }
 
@@ -807,24 +823,24 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                             moveTo(arcLeft, h - 20.dp.toPx())
                             cubicTo(arcLeft, arcTop, arcRight, arcTop, arcRight, h - 20.dp.toPx())
                         }
-                        drawPath(path, color = Color.White.copy(alpha = 0.3f), style = Stroke(width = 2.dp.toPx()))
+                        drawPath(path, color = contentColor.copy(alpha = 0.3f), style = Stroke(width = 2.dp.toPx()))
 
                         val t = sunProgress
                         val sunX = arcLeft + (arcRight - arcLeft) * t
                         val sunYSimple = h - 20.dp.toPx() - (4 * t * (1 - t)) * (h - arcTop - 20.dp.toPx())
-                        drawCircle(Color.White, radius = 8.dp.toPx(), center = Offset(sunX, sunYSimple))
+                        drawCircle(contentColor, radius = 8.dp.toPx(), center = Offset(sunX, sunYSimple))
                         drawCircle(Color(0xFFFFECB3), radius = 5.dp.toPx(), center = Offset(sunX, sunYSimple))
                     }
 
                     Spacer(Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column {
-                            Text("SUNRISE", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-                            Text(sunriseStr, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text("SUNRISE", color = secondaryContentColor, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                            Text(sunriseStr, color = contentColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("SUNSET", color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-                            Text(sunsetStr, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                            Text("SUNSET", color = secondaryContentColor, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                            Text(sunsetStr, color = contentColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -834,12 +850,12 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                 FullWidgetBox(icon = Icons.Default.WaterDrop, label = "Rainfall") {
                     val last24 = data.rainfallLast24h ?: 0.0
                     val next24 = data.rainfallNext24h ?: 0.0
-                    Text("${String.format("%.0f", last24)} mm", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold)
-                    Text("in last 24h", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                    Text("${String.format("%.0f", last24)} mm", color = contentColor, fontSize = 36.sp, fontWeight = FontWeight.Bold)
+                    Text("in last 24h", color = secondaryContentColor, fontSize = 13.sp)
                     Spacer(Modifier.height(16.dp))
                     Text(
                         "${String.format("%.0f", next24)} mm expected in next 24h.",
-                        color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp
+                        color = contentColor.copy(alpha = 0.8f), fontSize = 14.sp
                     )
                 }
 
@@ -861,7 +877,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                         Canvas(modifier = Modifier.size(72.dp)) {
                             val cx = size.width / 2; val cy = size.height / 2; val r = size.width / 2 - 2.dp.toPx()
-                            drawCircle(Color.White.copy(alpha = 0.1f), radius = r)
+                            drawCircle(contentColor.copy(alpha = 0.1f), radius = r)
                             val illumination = when {
                                 phase <= 0.5 -> phase * 2  
                                 else -> (1.0 - phase) * 2  
@@ -881,9 +897,9 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         }
 
                         Column {
-                            Text(phaseName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                            Text(phaseName, color = contentColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(4.dp))
-                            Text("${(phase * 100).toInt()}% through cycle", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp)
+                            Text("${(phase * 100).toInt()}% through cycle", color = secondaryContentColor, fontSize = 13.sp)
                         }
                     }
                 }
@@ -906,11 +922,11 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                 )
             }
 
-            Text(text = headerText, color = Color.White.copy(alpha = 0.9f), fontSize = titleSize, fontWeight = titleWeight, modifier = Modifier.offset(x = titleX, y = titleY))
+            Text(text = headerText, color = contentColor.copy(alpha = 0.9f), fontSize = titleSize, fontWeight = titleWeight, modifier = Modifier.offset(x = titleX, y = titleY))
             if (settings.headerType != HeaderType.Disabled) {
-                Text(text = "-", color = Color.White.copy(alpha = dashAlpha), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.offset(x = dashX, y = titleY))
+                Text(text = "-", color = contentColor.copy(alpha = dashAlpha), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.offset(x = dashX, y = titleY))
             }
-            Text(text = "${data.temp ?: "__"}°", color = Color.White.copy(alpha = tempAlpha), fontSize = tempSize, fontWeight = FontWeight.Bold, modifier = Modifier.offset(x = tempX, y = tempY))
+            Text(text = "${data.temp ?: "__"}°", color = contentColor.copy(alpha = tempAlpha), fontSize = tempSize, fontWeight = FontWeight.Bold, modifier = Modifier.offset(x = tempX, y = tempY))
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -922,9 +938,9 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     layout(constraints.maxWidth, placeable.height) { placeable.placeRelative(currentX.toInt(), 0) }
                 }
             ) {
-                Icon(Icons.Default.Navigation, contentDescription = null, tint = Color.White.copy(alpha = 0.8f), modifier = Modifier.size(10.dp).graphicsLayer { rotationZ = 45f })
+                Icon(Icons.Default.Navigation, contentDescription = null, tint = contentColor.copy(alpha = 0.8f), modifier = Modifier.size(10.dp).graphicsLayer { rotationZ = 45f })
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(text = updateText, color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                Text(text = updateText, color = contentColor.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
             }
         }
 

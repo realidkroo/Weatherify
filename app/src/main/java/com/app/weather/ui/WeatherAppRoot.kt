@@ -32,6 +32,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.MaterialTheme
+import com.app.weather.ui.theme.WeatherAppTheme
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
@@ -49,6 +52,7 @@ enum class NavType { Tab, Push, Pop, Instant }
 
 data class AppSettings(
     val theme:        AppTheme   = AppTheme.Dark,
+    val monet:        Boolean    = false,
     val haptics:      Boolean    = true,
     val blur:         Boolean    = true,
     val animation:    Boolean    = true,
@@ -241,118 +245,126 @@ fun WeatherAppRoot() {
     val backgroundAppBlur   = (12f * overlayProgress.value + 8f * stackedOverlayProgress.value).dp
     val backgroundAppRadius = (32f * overlayProgress.value + 16f * stackedOverlayProgress.value).dp
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    val darkTheme = when (settings.theme) {
+        AppTheme.Light -> false
+        AppTheme.Dark -> true
+        AppTheme.Auto -> isSystemInDarkTheme()
+    }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = backgroundAppScale
-                    scaleY = backgroundAppScale
-                }
-                .clip(RoundedCornerShape(backgroundAppRadius))
-                .blur(backgroundAppBlur, BlurredEdgeTreatment.Unbounded)
-        ) {
-            if (swipeOffset.value != 0f && swipeBgDest != null) {
-                val parallaxX = if (swipeOffset.value > 0f) (swipeOffset.value - screenWidthPx) * 0.3f
-                               else (swipeOffset.value + screenWidthPx) * 0.3f
-                Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = parallaxX }) {
-                    renderDestination(swipeBgDest!!)
-                    val progress = (kotlin.math.abs(swipeOffset.value) / screenWidthPx).coerceIn(0f, 1f)
-                    val shadowAlpha = 0.6f * (1f - progress)
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = shadowAlpha)))
-                }
-            }
+    WeatherAppTheme(darkTheme = darkTheme, dynamicColor = settings.monet) {
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .offset { IntOffset(swipeOffset.value.roundToInt(), 0) }
-                    .background(Color(0xFF0D0D0D))
-                    .pointerInput(currentDestination, settingsMenu) {
-                        var dragAccumulator = 0f
-                        var isEdgeSwipe = false
-                        var swipeDirection = 0
+                    .graphicsLayer {
+                        scaleX = backgroundAppScale
+                        scaleY = backgroundAppScale
+                    }
+                    .clip(RoundedCornerShape(backgroundAppRadius))
+                    .blur(backgroundAppBlur, BlurredEdgeTreatment.Unbounded)
+            ) {
+                if (swipeOffset.value != 0f && swipeBgDest != null) {
+                    val parallaxX = if (swipeOffset.value > 0f) (swipeOffset.value - screenWidthPx) * 0.3f
+                    else (swipeOffset.value + screenWidthPx) * 0.3f
+                    Box(modifier = Modifier.fillMaxSize().graphicsLayer { translationX = parallaxX }) {
+                        renderDestination(swipeBgDest!!)
+                        val progress = (kotlin.math.abs(swipeOffset.value) / screenWidthPx).coerceIn(0f, 1f)
+                        val shadowAlpha = 0.6f * (1f - progress)
+                        Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = shadowAlpha)))
+                    }
+                }
 
-                        detectHorizontalDragGestures(
-                            onDragStart = { offset ->
-                                dragAccumulator = 0f
-                                val canRootSwipeBack = backStack.size > 1 &&
-                                        !(currentDestination == Destination.Settings && settingsMenu != "Main")
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .offset { IntOffset(swipeOffset.value.roundToInt(), 0) }
+                        .background(MaterialTheme.colorScheme.surface)
+                        .pointerInput(currentDestination, settingsMenu) {
+                            var dragAccumulator = 0f
+                            var isEdgeSwipe = false
+                            var swipeDirection = 0
 
-                                when {
-                                    offset.x < 200f && canRootSwipeBack -> {
-                                        isEdgeSwipe   = true
-                                        swipeDirection = 1
-                                        swipeBgDest   = backStack[backStack.lastIndex - 1]
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    dragAccumulator = 0f
+                                    val canRootSwipeBack = backStack.size > 1 &&
+                                            !(currentDestination == Destination.Settings && settingsMenu != "Main")
+
+                                    when {
+                                        offset.x < 200f && canRootSwipeBack -> {
+                                            isEdgeSwipe   = true
+                                            swipeDirection = 1
+                                            swipeBgDest   = backStack[backStack.lastIndex - 1]
+                                        }
+                                        offset.x > size.width - 200f && forwardStack.isNotEmpty() &&
+                                                currentDestination != Destination.Weather -> {
+                                            isEdgeSwipe   = true
+                                            swipeDirection = -1
+                                            swipeBgDest   = forwardStack.first()
+                                        }
+                                        else -> isEdgeSwipe = false
                                     }
-                                    offset.x > size.width - 200f && forwardStack.isNotEmpty() &&
-                                            currentDestination != Destination.Weather -> {
-                                        isEdgeSwipe   = true
-                                        swipeDirection = -1
-                                        swipeBgDest   = forwardStack.first()
-                                    }
-                                    else -> isEdgeSwipe = false
-                                }
-                            },
-                            onHorizontalDrag = { _, dragAmount ->
-                                if (isEdgeSwipe) {
-                                    dragAccumulator += dragAmount
-                                    if ((swipeDirection == 1 && dragAccumulator > 0) ||
-                                        (swipeDirection == -1 && dragAccumulator < 0)) {
-                                        coroutineScope.launch { swipeOffset.snapTo(dragAccumulator) }
-                                    }
-                                }
-                            },
-                            onDragEnd = {
-                                if (isEdgeSwipe) {
-                                    coroutineScope.launch {
-                                        if (swipeDirection == 1 && dragAccumulator > 150f) {
-                                            swipeOffset.animateTo(screenWidthPx, tween(200, easing = LinearEasing))
-                                            handleBack(NavType.Instant)
-                                            delay(32)
-                                            swipeOffset.snapTo(0f)
-                                            swipeBgDest = null
-                                        } else if (swipeDirection == -1 && dragAccumulator < -150f) {
-                                            swipeOffset.animateTo(-screenWidthPx, tween(200, easing = LinearEasing))
-                                            navType = NavType.Instant
-                                            val next = forwardStack.first()
-                                            forwardStack = forwardStack.drop(1)
-                                            backStack = backStack + next
-                                            delay(32)
-                                            swipeOffset.snapTo(0f)
-                                            swipeBgDest = null
-                                        } else {
-                                            swipeOffset.animateTo(0f, spring(stiffness = 300f))
-                                            swipeBgDest = null
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    if (isEdgeSwipe) {
+                                        dragAccumulator += dragAmount
+                                        if ((swipeDirection == 1 && dragAccumulator > 0) ||
+                                            (swipeDirection == -1 && dragAccumulator < 0)) {
+                                            coroutineScope.launch { swipeOffset.snapTo(dragAccumulator) }
                                         }
                                     }
+                                },
+                                onDragEnd = {
+                                    if (isEdgeSwipe) {
+                                        coroutineScope.launch {
+                                            if (swipeDirection == 1 && dragAccumulator > 150f) {
+                                                swipeOffset.animateTo(screenWidthPx, tween(200, easing = LinearEasing))
+                                                handleBack(NavType.Instant)
+                                                delay(32)
+                                                swipeOffset.snapTo(0f)
+                                                swipeBgDest = null
+                                            } else if (swipeDirection == -1 && dragAccumulator < -150f) {
+                                                swipeOffset.animateTo(-screenWidthPx, tween(200, easing = LinearEasing))
+                                                navType = NavType.Instant
+                                                val next = forwardStack.first()
+                                                forwardStack = forwardStack.drop(1)
+                                                backStack = backStack + next
+                                                delay(32)
+                                                swipeOffset.snapTo(0f)
+                                                swipeBgDest = null
+                                            } else {
+                                                swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                                swipeBgDest = null
+                                            }
+                                        }
+                                    }
+                                },
+                                onDragCancel = {
+                                    coroutineScope.launch {
+                                        swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                        swipeBgDest = null
+                                    }
                                 }
-                            },
-                            onDragCancel = {
-                                coroutineScope.launch {
-                                    swipeOffset.animateTo(0f, spring(stiffness = 300f))
-                                    swipeBgDest = null
-                                }
-                            }
-                        )
-                    }
-            ) {
-                Box(modifier = Modifier.fillMaxSize().glassRoot(glassState)) {
-                    AnimatedContent(
-                        targetState = currentDestination,
-                        label       = "AppNavigation",
-                        modifier    = Modifier.fillMaxSize(),
-                        transitionSpec = {
-                            if (navType == NavType.Tab) {
-                                (fadeIn(animationSpec = tween(400, delayMillis = 50)) + scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f))) togetherWith
-                                (fadeOut(animationSpec = tween(300)) + scaleOut(targetScale = 1.08f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f)))
-                            } else {
-                                EnterTransition.None togetherWith ExitTransition.None
-                            }
+                            )
                         }
-                    ) { destination ->
-                        renderDestination(destination)
+                ) {
+                    Box(modifier = Modifier.fillMaxSize().glassRoot(glassState)) {
+                        AnimatedContent(
+                            targetState = currentDestination,
+                            label       = "AppNavigation",
+                            modifier    = Modifier.fillMaxSize(),
+                            transitionSpec = {
+                                if (navType == NavType.Tab) {
+                                    (fadeIn(animationSpec = tween(400, delayMillis = 50)) + scaleIn(initialScale = 0.92f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f))) togetherWith
+                                    (fadeOut(animationSpec = tween(300)) + scaleOut(targetScale = 1.08f, animationSpec = spring(dampingRatio = 0.85f, stiffness = 300f)))
+                                } else {
+                                    EnterTransition.None togetherWith ExitTransition.None
+                                }
+                            }
+                        ) { destination ->
+                            renderDestination(destination)
+                        }
                     }
                 }
             }
@@ -376,98 +388,98 @@ fun WeatherAppRoot() {
                     }
                 }
             )
-        }
 
-        if (stackedOverlayProgress.value > 0f) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f * stackedOverlayProgress.value)))
-        }
-
-        if (displayedOverlay != OverlayType.None || overlayProgress.value > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = overlayProgress.value * 0.5f }
-                    .background(Color.Black)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { handleBack() }
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onGloballyPositioned { primaryOverlayHeightPx = it.size.height.toFloat() }
-                    .graphicsLayer {
-                        scaleX = 1f - 0.06f * stackedOverlayProgress.value
-                        scaleY = 1f - 0.06f * stackedOverlayProgress.value
-                        translationY = ((1f - overlayProgress.value) * primaryOverlayHeightPx)
-                        alpha = 1f - 0.2f * stackedOverlayProgress.value
-                    }
-                    .blur((8f * stackedOverlayProgress.value).dp, BlurredEdgeTreatment.Unbounded)
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                if (overlayProgress.value < 0.8f) handleBack()
-                                else coroutineScope.launch { overlayProgress.animateTo(1f, spring(stiffness = 400f)) }
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                val deltaProgress = dragAmount / (primaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
-                                val newProgress = (overlayProgress.value - deltaProgress).coerceIn(0f, 1f)
-                                coroutineScope.launch { overlayProgress.snapTo(newProgress) }
-                            }
-                        )
-                    }
-            ) {
-                OverlayContent(
-                    overlayType       = displayedOverlay,
-                    settings          = settings,
-                    onUpdateSettings  = { settings = it },
-                    onOpenNested      = { activeNestedOverlay = it }
-                )
+            if (stackedOverlayProgress.value > 0f) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f * stackedOverlayProgress.value)))
             }
-        }
 
-        if (activeNestedOverlay != NestedOverlay.None || stackedOverlayProgress.value > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { activeNestedOverlay = NestedOverlay.None }
-            )
-
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onGloballyPositioned { secondaryOverlayHeightPx = it.size.height.toFloat() }
-                    .graphicsLayer {
-                        translationY = (1f - stackedOverlayProgress.value) * secondaryOverlayHeightPx
-                    }
-                    .pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragEnd = {
-                                if (stackedOverlayProgress.value < 0.8f) activeNestedOverlay = NestedOverlay.None
-                                else coroutineScope.launch { stackedOverlayProgress.animateTo(1f, spring(stiffness = 400f)) }
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                val deltaProgress = dragAmount / (secondaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
-                                val newProgress = (stackedOverlayProgress.value - deltaProgress).coerceIn(0f, 1f)
-                                coroutineScope.launch { stackedOverlayProgress.snapTo(newProgress) }
-                            }
-                        )
-                    }
-            ) {
-                HeaderTypeSelectionContent(
-                    settings = settings,
-                    onSelect = { type ->
-                        settings = settings.copy(headerType = type)
-                        activeNestedOverlay = NestedOverlay.None 
-                    }
+            if (displayedOverlay != OverlayType.None || overlayProgress.value > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = overlayProgress.value * 0.5f }
+                        .background(Color.Black)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { handleBack() }
                 )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { primaryOverlayHeightPx = it.size.height.toFloat() }
+                        .graphicsLayer {
+                            scaleX = 1f - 0.06f * stackedOverlayProgress.value
+                            scaleY = 1f - 0.06f * stackedOverlayProgress.value
+                            translationY = ((1f - overlayProgress.value) * primaryOverlayHeightPx)
+                            alpha = 1f - 0.2f * stackedOverlayProgress.value
+                        }
+                        .blur((8f * stackedOverlayProgress.value).dp, BlurredEdgeTreatment.Unbounded)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    if (overlayProgress.value < 0.8f) handleBack()
+                                    else coroutineScope.launch { overlayProgress.animateTo(1f, spring(stiffness = 400f)) }
+                                },
+                                onVerticalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val deltaProgress = dragAmount / (primaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
+                                    val newProgress = (overlayProgress.value - deltaProgress).coerceIn(0f, 1f)
+                                    coroutineScope.launch { overlayProgress.snapTo(newProgress) }
+                                }
+                            )
+                        }
+                ) {
+                    OverlayContent(
+                        overlayType       = displayedOverlay,
+                        settings          = settings,
+                        onUpdateSettings  = { settings = it },
+                        onOpenNested      = { activeNestedOverlay = it }
+                    )
+                }
+            }
+
+            if (activeNestedOverlay != NestedOverlay.None || stackedOverlayProgress.value > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { activeNestedOverlay = NestedOverlay.None }
+                )
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onGloballyPositioned { secondaryOverlayHeightPx = it.size.height.toFloat() }
+                        .graphicsLayer {
+                            translationY = (1f - stackedOverlayProgress.value) * secondaryOverlayHeightPx
+                        }
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures(
+                                onDragEnd = {
+                                    if (stackedOverlayProgress.value < 0.8f) activeNestedOverlay = NestedOverlay.None
+                                    else coroutineScope.launch { stackedOverlayProgress.animateTo(1f, spring(stiffness = 400f)) }
+                                },
+                                onVerticalDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val deltaProgress = dragAmount / (secondaryOverlayHeightPx.takeIf { it > 0 } ?: 2000f)
+                                    val newProgress = (stackedOverlayProgress.value - deltaProgress).coerceIn(0f, 1f)
+                                    coroutineScope.launch { stackedOverlayProgress.animateTo(newProgress, spring(stiffness = 400f)) }
+                                }
+                            )
+                        }
+                ) {
+                    HeaderTypeSelectionContent(
+                        settings = settings,
+                        onSelect = { type ->
+                            settings = settings.copy(headerType = type)
+                            activeNestedOverlay = NestedOverlay.None 
+                        }
+                    )
+                }
             }
         }
     }
