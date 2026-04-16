@@ -164,10 +164,14 @@ fun LiquidGlassNavBar(
     }
 
     val weatherIcon = when (weatherType) {
-        WeatherType.Clear -> Icons.Default.WbSunny
-        WeatherType.Clouds, WeatherType.Atmosphere -> Icons.Default.FilterDrama
-        WeatherType.Rain, WeatherType.Drizzle -> Icons.Default.WaterDrop
-        WeatherType.Thunderstorm, WeatherType.Snow -> Icons.Default.Thunderstorm
+        WeatherType.Clear                             -> Icons.Default.WbSunny
+        WeatherType.Clouds, WeatherType.Mist,
+        WeatherType.Fog, WeatherType.Haze,
+        WeatherType.Smoke                             -> Icons.Default.FilterDrama
+        WeatherType.Rain, WeatherType.Drizzle         -> Icons.Default.WaterDrop
+        WeatherType.Thunderstorm, WeatherType.Snow,
+        WeatherType.Tornado, WeatherType.Squall       -> Icons.Default.Thunderstorm
+        else                                          -> Icons.Default.FilterDrama
     }
     
     val blurAnim = remember { androidx.compose.animation.core.Animatable(0f) }

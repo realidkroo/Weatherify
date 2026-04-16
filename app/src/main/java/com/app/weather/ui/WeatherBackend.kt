@@ -17,7 +17,15 @@ enum class WeatherType(val title: String) {
     Drizzle("Drizzle"),
     Rain("Rainy"),
     Snow("Snowy"),
-    Atmosphere("Haze"),
+    Mist("Misty"),
+    Smoke("Smoky"),
+    Haze("Hazy"),
+    Dust("Dusty"),
+    Fog("Foggy"),
+    Sand("Sandy"),
+    Ash("Ashy"),
+    Squall("Squally"),
+    Tornado("Tornado"),
     Clear("Clear"),
     Clouds("Cloudy")
 }
@@ -214,7 +222,16 @@ object WeatherBackend {
             in 300..321 -> WeatherType.Drizzle
             in 500..531 -> WeatherType.Rain
             in 600..622 -> WeatherType.Snow
-            in 701..781 -> WeatherType.Atmosphere
+            701         -> WeatherType.Mist
+            711         -> WeatherType.Smoke
+            721         -> WeatherType.Haze
+            731         -> WeatherType.Dust
+            741         -> WeatherType.Fog
+            751         -> WeatherType.Sand
+            761         -> WeatherType.Dust
+            762         -> WeatherType.Ash
+            771         -> WeatherType.Squall
+            781         -> WeatherType.Tornado
             800         -> WeatherType.Clear
             else        -> WeatherType.Clouds
         }

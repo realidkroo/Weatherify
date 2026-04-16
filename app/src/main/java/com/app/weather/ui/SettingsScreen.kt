@@ -45,25 +45,90 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.app.weather.R
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 enum class SubNavType { Push, Pop, Instant }
+
+@Composable
+fun ExperimentalOverlayContent(
+    settings: AppSettings,
+    onUpdate: (AppSettings) -> Unit,
+    onWeatherSelect: (WeatherType) -> Unit
+) {
+    val weatherTypes = WeatherType.entries.toTypedArray()
+    val visualStates = VisualState.entries.toTypedArray()
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Icon(
+            imageVector = Icons.Default.Science,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(48.dp).padding(bottom = 12.dp)
+        )
+        Text("Experimental Menu", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text("Modify weather and time visual states in real-time.", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Pill sits behind the pickers — no outer clip box needed
+        Box(modifier = Modifier.fillMaxWidth()) {
+            // Selection highlight pill — centered vertically in the picker height
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth(0.9f)
+                    .height(44.dp)   // matches IOSWheelPicker itemHeight
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.08f))
+            )
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    IOSWheelPicker(
+                        options = weatherTypes.map { it.title },
+                        selectedIndex = weatherTypes.indexOfFirst { it.title == "Clear" }.coerceAtLeast(0),
+                        onIndexSelected = { onWeatherSelect(weatherTypes[it]) }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(44.dp)   // same as pill/item height
+                        .align(Alignment.CenterVertically)
+                        .background(Color.White.copy(alpha = 0.1f))
+                )
+
+                Box(modifier = Modifier.weight(1f)) {
+                    IOSWheelPicker(
+                        options = visualStates.map { it.title },
+                        selectedIndex = visualStates.indexOf(settings.visualStateOverride).coerceAtLeast(0),
+                        onIndexSelected = { onUpdate(settings.copy(visualStateOverride = visualStates[it])) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun SettingsScreen(
@@ -202,7 +267,7 @@ fun SettingsScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSelectWeather(WeatherType.values().random()) }
+                                    .clickable { onSelectWeather(WeatherType.entries.toTypedArray().random()) }
                                     .padding(horizontal = 20.dp, vertical = 16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -218,11 +283,20 @@ fun SettingsScreen(
                         }
                     }
                     
-                    item { Text("Force Weather State", color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), fontSize = 14.sp) }
+                    item { Text("Experimental Options", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp) }
+                    
+                    item {
+                        SettingsItemOverlay(
+                            title = "Experimental Menu",
+                            subtitle = "Modify weather and time visual states",
+                            icon = Icons.Default.Science,
+                            onClick = { onOpenOverlay(OverlayType.Experimental) }
+                        )
+                    }
                     
                     item {
                         SettingsGroup {
-                            WeatherType.values().forEach { type ->
+                            WeatherType.entries.forEach { type ->
                                 SettingsItemOverlay(type.title, "force state", Icons.Outlined.Cloud) { onSelectWeather(type); handleBack(SubNavType.Pop) }
                             }
                         }
@@ -489,15 +563,15 @@ fun SettingsItemOverlay(title: String, subtitle: String, icon: ImageVector, tint
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = if (tint == Color.Unspecified) MaterialTheme.colorScheme.onSecondaryContainer else tint, modifier = Modifier.size(18.dp))
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = if (tint == Color.Unspecified) Color.White else tint, modifier = Modifier.size(18.dp))
         }
         Spacer(modifier = Modifier.width(16.dp))
         Column {
-            Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             if (subtitle.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                Text(subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
             }
         }
     }
@@ -513,25 +587,27 @@ fun SettingsSwitch(title: String, subtitle: String, icon: ImageVector, checked: 
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
+            Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(16.dp))
             Column(modifier = Modifier.padding(end = 16.dp)) {
-                Text(title, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 if (subtitle.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp, lineHeight = 16.sp)
+                    Text(subtitle, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, lineHeight = 16.sp)
                 }
             }
         }
         Switch(
             checked = checked, onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                checkedThumbColor = Color.White,
+                checkedTrackColor = Color.Gray,
+                uncheckedThumbColor = Color.DarkGray,
+                uncheckedTrackColor = Color.Black.copy(alpha = 0.4f),
+                checkedBorderColor = Color.Transparent,
+                uncheckedBorderColor = Color.White.copy(alpha = 0.2f)
             )
         )
     }
@@ -592,7 +668,8 @@ fun OverlayContent(
     overlayType: OverlayType, 
     settings: AppSettings, 
     onUpdateSettings: (AppSettings) -> Unit, 
-    onOpenNested: (NestedOverlay) -> Unit
+    onOpenNested: (NestedOverlay) -> Unit,
+    onWeatherSelect: (WeatherType) -> Unit = {}
 ) {
     val context = LocalContext.current
     
@@ -618,10 +695,31 @@ fun OverlayContent(
                         ThemeCard("Light theme", Icons.Outlined.LightMode, settings.theme == AppTheme.Light) { onUpdateSettings(settings.copy(theme = AppTheme.Light)) }
                         ThemeCard("dark theme", Icons.Outlined.DarkMode, settings.theme == AppTheme.Dark) { onUpdateSettings(settings.copy(theme = AppTheme.Dark)) }
                     }
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text("or", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     ThemeCard("Auto by system", Icons.Outlined.BrightnessAuto, settings.theme == AppTheme.Auto) { onUpdateSettings(settings.copy(theme = AppTheme.Auto)) }
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { onUpdateSettings(settings.copy(monet = !settings.monet)) }
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.ColorLens, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Material You", color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Dynamic colors based on wallpaper", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                        }
+                        androidx.compose.material3.Switch(
+                            checked = settings.monet,
+                            onCheckedChange = { onUpdateSettings(settings.copy(monet = it)) }
+                        )
+                    }
                 }
                 OverlayType.Quote -> {
                     Icon(Icons.Outlined.FormatQuote, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
@@ -811,6 +909,11 @@ fun OverlayContent(
                         }
                     }
                 }
+                OverlayType.Experimental -> ExperimentalOverlayContent(
+                    settings = settings,
+                    onUpdate = onUpdateSettings,
+                    onWeatherSelect = onWeatherSelect
+                )
                 OverlayType.Provider -> {
                     Icon(Icons.Outlined.CloudQueue, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
                     Text("Weather Provider", color = MaterialTheme.colorScheme.onSurface, fontSize = 32.sp, fontWeight = FontWeight.Bold)

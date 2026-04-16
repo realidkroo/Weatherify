@@ -45,8 +45,8 @@ fun DebugMenuScreen(
         // Quick cycle pill
         Row(
             modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.1f)).clickable {
-                val types = WeatherType.values()
-                onSelectWeather(types.random()) // Cycles to a random one for quick testing
+                val types = WeatherType.entries.toTypedArray()
+                onSelectWeather(types.random())
             }.padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -93,7 +93,7 @@ fun DebugMenuScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            items(WeatherType.values()) { type ->
+            items(WeatherType.entries.toTypedArray()) { type ->
                 Row(
                     modifier = Modifier.fillMaxWidth().clickable { onSelectWeather(type); onBack() }.padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically

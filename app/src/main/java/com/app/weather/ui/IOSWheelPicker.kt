@@ -1,33 +1,31 @@
 package com.app.weather.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun IOSWheelPicker(
     options: List<String>,
@@ -35,98 +33,128 @@ fun IOSWheelPicker(
     onIndexSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState(initialFirstVisibleItemIndex = selectedIndex)
-    val coroutineScope = rememberCoroutineScope()
+    val itemHeight = 44.dp
+    val visibleItems = 7
     val density = LocalDensity.current
-    val itemHeight = 40.dp
     val itemHeightPx = with(density) { itemHeight.toPx() }
 
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress) {
-            val layoutInfo = listState.layoutInfo
-            val centerOffset = layoutInfo.viewportEndOffset / 2
-            var closestIndex = selectedIndex
-            var minDiff = Int.MAX_VALUE
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (selectedIndex - visibleItems / 2).coerceAtLeast(0)
+    )
+    val snapFlingBehavior = rememberSnapFlingBehavior(lazyListState = listState)
 
-            layoutInfo.visibleItemsInfo.forEach { item ->
-                val itemCenter = item.offset + (item.size / 2)
-                val diff = kotlin.math.abs(itemCenter - centerOffset)
-                if (diff < minDiff) {
-                    minDiff = diff
-                    closestIndex = item.index
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .collect { scrolling ->
+                if (!scrolling) {
+                    val layoutInfo = listState.layoutInfo
+                    val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+                    val closest = layoutInfo.visibleItemsInfo.minByOrNull { item ->
+                        val itemCenter = item.offset + item.size / 2f
+                        abs(itemCenter - viewportCenter)
+                    }
+                    closest?.let { item ->
+                        if (item.index != selectedIndex && item.index in options.indices) {
+                            onIndexSelected(item.index)
+                        }
+                    }
                 }
             }
-            
-            if (closestIndex != selectedIndex && closestIndex in options.indices) {
-                onIndexSelected(closestIndex)
-            }
-            listState.animateScrollToItem(closestIndex)
-        }
     }
 
     Box(
         modifier = modifier
-            .height(itemHeight * 5)
-            .fillMaxWidth()
-            .clipToBounds(),
+            .height(itemHeight * visibleItems)
+            .fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
         LazyColumn(
             state = listState,
-            contentPadding = PaddingValues(vertical = itemHeight * 2),
-            modifier = Modifier.fillMaxSize(),
+            flingBehavior = snapFlingBehavior,
+            contentPadding = PaddingValues(vertical = itemHeight * (visibleItems / 2)),
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds()
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
+                .drawWithContent {
+                    drawContent()
+
+                    // Top fade
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.White),
+                            startY = 0f,
+                            endY = itemHeightPx * 2f
+                        ),
+                        blendMode = BlendMode.DstIn
+                    )
+
+                    // Bottom fade
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.White, Color.Transparent),
+                            startY = size.height - itemHeightPx * 2f,
+                            endY = size.height
+                        ),
+                        blendMode = BlendMode.DstIn
+                    )
+                },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             items(options.size) { index ->
-                val offsetFromCenter = remember(listState) {
-                    derivedStateOf {
-                        val layoutInfo = listState.layoutInfo
-                        val viewPortCenter = layoutInfo.viewportEndOffset / 2f
-                        val itemInfo = layoutInfo.visibleItemsInfo.find { it.index == index }
-                        if (itemInfo != null) {
-                            val itemCenter = itemInfo.offset + itemInfo.size / 2f
-                            (itemCenter - viewPortCenter) / (itemHeightPx * 2f) 
-                        } else 1f
-                    }
-                }
-
-                val normalizedOffset = offsetFromCenter.value.coerceIn(-1f, 1f)
-                val rotationDeg = normalizedOffset * 60f 
-                val alphaCalc = 1f - kotlin.math.abs(normalizedOffset)
-
                 Box(
                     modifier = Modifier
                         .height(itemHeight)
                         .fillMaxWidth()
                         .graphicsLayer {
-                            alpha = alphaCalc.coerceIn(0.1f, 1f)
+                            // Calculating offset inside the draw phase eliminates ALL "flying" lag
+                            val layoutInfo = listState.layoutInfo
+                            val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+                            val itemInfo = layoutInfo.visibleItemsInfo.find { it.index == index }
+                            
+                            val normalizedOffset = if (itemInfo != null) {
+                                val itemCenter = itemInfo.offset + itemInfo.size / 2f
+                                (itemCenter - viewportCenter) / itemHeightPx
+                            } else {
+                                if (index < listState.firstVisibleItemIndex) -4f else 4f
+                            }
+
+                            // True cylinder math
+                            val anglePerItemDeg = 28f
+                            val rotationDeg = (normalizedOffset * anglePerItemDeg).coerceIn(-90f, 90f)
+                            val angleRad = Math.toRadians(rotationDeg.toDouble()).toFloat()
+
+                            val radiusPx = itemHeightPx / sin(Math.toRadians(anglePerItemDeg.toDouble())).toFloat()
+                            
+                            val linearY = normalizedOffset * itemHeightPx
+                            val projectedY = radiusPx * sin(angleRad)
+                            val shiftY = projectedY - linearY 
+                            
+                            val scale = (cos(angleRad) * 0.9f + 0.1f).coerceIn(0.6f, 1f)
+                            val itemAlpha = (cos(angleRad)).coerceIn(0f, 1f)
+
+                            translationY = shiftY
                             rotationX = rotationDeg
+                            alpha = itemAlpha
+                            scaleX = scale
+                            scaleY = scale
                             cameraDistance = 12f * density.density
-                        }
-                        .clickable {
-                            coroutineScope.launch { listState.animateScrollToItem(index) }
                         },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = options[index],
                         color = Color.White,
-                        fontSize = 20.sp,
-                        fontWeight = if (kotlin.math.abs(normalizedOffset) < 0.2f) FontWeight.Bold else FontWeight.Medium,
-                        textAlign = TextAlign.Center
+                        fontSize = 22.sp,
+                        // Update bold state cleanly without triggering re-composition lag
+                        fontWeight = if (selectedIndex == index) FontWeight.Bold else FontWeight.Medium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
                     )
                 }
             }
         }
-        
-        // Fading edges for better look
-        Box(modifier = Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                0f to Color.Black.copy(alpha = 0.6f),
-                0.2f to Color.Transparent,
-                0.8f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.6f)
-            )
-        ))
     }
 }
