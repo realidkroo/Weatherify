@@ -41,7 +41,10 @@ You can now build the app using Android Studio or the command line:
 ./gradlew assembleDebug
 ```
 
-### 3 | run the app
+### 3 | Enter api keys
+copy `secrets.properties.example` to `secrets.properties` and enter your real keys. especoiallly openweather.
+
+### 4 | run the app
 - Connect an android device or start an emulator.
 - Use Android Studio's **run** button or:
   ```bash

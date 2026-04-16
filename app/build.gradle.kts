@@ -1,10 +1,12 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
 val secretsFile = rootProject.file("secrets.properties")
-val secrets = java.util.Properties()
+val secrets = Properties()
 if (secretsFile.exists()) {
     secrets.load(secretsFile.inputStream())
 }

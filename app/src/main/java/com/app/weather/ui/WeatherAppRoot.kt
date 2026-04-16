@@ -83,7 +83,12 @@ fun WeatherAppRoot() {
     var settingsMenu by remember { mutableStateOf("Main") }
 
     var weatherData  by remember { mutableStateOf(WeatherCache.load(context) ?: WeatherData.Default) }
-    var settings     by remember { mutableStateOf(AppSettings()) }
+    var settings     by remember { mutableStateOf(SettingsPersistence.load(context)) }
+
+    // Auto-save settings when they change
+    LaunchedEffect(settings) {
+        SettingsPersistence.save(context, settings)
+    }
 
     var activeOverlay    by remember { mutableStateOf(OverlayType.None) }
     var displayedOverlay by remember { mutableStateOf(OverlayType.None) }

@@ -2,10 +2,13 @@ package com.app.weather.ui
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import org.json.JSONObject
 import org.json.JSONArray
 import java.net.URL
 import android.content.Context
+import com.app.weather.BuildConfig
 
 // ─── Data Models ─────────────────────────────────────────────────────────────
 
@@ -222,20 +225,45 @@ object WeatherBackend {
         return sdf.format(java.util.Date(epoch * 1000))
     }
 
-    private fun fetchFromApi(query: String): WeatherData {
+    private suspend fun fetchFromApi(query: String): WeatherData = coroutineScope {
         val timeFormat = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
         val updateTime = timeFormat.format(java.util.Date())
 
         if (currentProvider == "BMKG") {
-            return WeatherData.Default.copy(location = "Indonesia", description = "BMKG reports clouds", lastUpdated = updateTime)
+            return@coroutineScope WeatherData.Default.copy(location = "Indonesia", description = "BMKG reports clouds", lastUpdated = updateTime)
         } else if (currentProvider == "Google") {
-            return WeatherData.Default.copy(location = "Mountain View", description = "Google Weather simulated", lastUpdated = updateTime)
+            return@coroutineScope WeatherData.Default.copy(location = "Mountain View", description = "Google Weather simulated", lastUpdated = updateTime)
         }
 
-        return try {
-            // ── Current weather ──────────────────────────────────────────────
-            val currentUrl = "https://api.openweathermap.org/data/2.5/weather?$query&appid=$openWeatherApiKey&units=metric"
-            val currentJson = JSONObject(URL(currentUrl).readText())
+        try {
+            // ── Parallel Tier 1: Current Weather & Forecast ──────────────────
+            val currentDeferred = async { 
+                val url = "https://api.openweathermap.org/data/2.5/weather?$query&appid=$openWeatherApiKey&units=metric"
+                JSONObject(URL(url).readText())
+            }
+            val forecastDeferred = async {
+                val url = "https://api.openweathermap.org/data/2.5/forecast?$query&appid=$openWeatherApiKey&units=metric"
+                JSONObject(URL(url).readText())
+            }
+
+            val currentJson = currentDeferred.await()
+            val coord = currentJson.getJSONObject("coord")
+            val lat = coord.getDouble("lat")
+            val lon = coord.getDouble("lon")
+
+            // ── Parallel Tier 2: AQI & UV (Requires Lat/Lon) ─────────────────
+            val aqiDeferred = async {
+                try {
+                    val url = "https://api.openweathermap.org/data/2.5/air_pollution?lat=$lat&lon=$lon&appid=$openWeatherApiKey"
+                    JSONObject(URL(url).readText()).getJSONArray("list").getJSONObject(0).getJSONObject("main").getInt("aqi")
+                } catch (_: Exception) { null }
+            }
+            val uvDeferred = async {
+                try {
+                    val url = "https://api.openweathermap.org/data/2.5/uvi?lat=$lat&lon=$lon&appid=$openWeatherApiKey"
+                    JSONObject(URL(url).readText()).getDouble("value")
+                } catch (_: Exception) { null }
+            }
 
             val main = currentJson.getJSONObject("main")
             val temp = main.getDouble("temp").toInt()
@@ -251,10 +279,6 @@ object WeatherBackend {
             val visibilityM = currentJson.optInt("visibility", 10000)
             val location = currentJson.getString("name")
 
-            val coord = currentJson.getJSONObject("coord")
-            val lat = coord.getDouble("lat")
-            val lon = coord.getDouble("lon")
-
             val weatherArray = currentJson.getJSONArray("weather").getJSONObject(0)
             val conditionId = weatherArray.getInt("id")
             val description = weatherArray.getString("description")
@@ -266,9 +290,8 @@ object WeatherBackend {
 
             val rainLast1h = currentJson.optJSONObject("rain")?.optDouble("1h", 0.0) ?: 0.0
 
-            // ── 5-day / 3-hour forecast ─────────────────────────────────────
-            val forecastUrl = "https://api.openweathermap.org/data/2.5/forecast?$query&appid=$openWeatherApiKey&units=metric"
-            val forecastList = JSONObject(URL(forecastUrl).readText()).getJSONArray("list")
+            // ── 5-day / 3-hour forecast (already fetched) ───────────────────
+            val forecastList = forecastDeferred.await().getJSONArray("list")
 
             val fmtIn = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
             val fmtHour = java.text.SimpleDateFormat("h a", java.util.Locale.getDefault())
@@ -320,13 +343,8 @@ object WeatherBackend {
                 dayIdx++
             }
 
-            // ── Air Quality ─────────────────────────────────────────────────
-            val aqiValue: Int? = try {
-                val aqiUrl = "https://api.openweathermap.org/data/2.5/air_pollution?lat=$lat&lon=$lon&appid=$openWeatherApiKey"
-                val aqiJson = JSONObject(URL(aqiUrl).readText())
-                aqiJson.getJSONArray("list").getJSONObject(0).getJSONObject("main").getInt("aqi")
-            } catch (_: Exception) { null }
-
+            // ── Air Quality & UV (already fetched) ──────────────────────────
+            val aqiValue = aqiDeferred.await()
             val aqiLabel = when (aqiValue) {
                 1 -> "Good AQI"
                 2 -> "Fair AQI"
@@ -336,11 +354,7 @@ object WeatherBackend {
                 else -> "AQI --"
             }
 
-            // ── UV Index ────────────────────────────────────────────────────
-            val uvIndex: Double? = try {
-                val uvUrl = "https://api.openweathermap.org/data/2.5/uvi?lat=$lat&lon=$lon&appid=$openWeatherApiKey"
-                JSONObject(URL(uvUrl).readText()).getDouble("value")
-            } catch (_: Exception) { null }
+            val uvIndex = uvDeferred.await()
 
             // ── Moon phase (approx from date, no OneCall required) ──────────
             val moonPhase = approximateMoonPhase()

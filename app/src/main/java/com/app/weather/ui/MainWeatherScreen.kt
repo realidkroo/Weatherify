@@ -214,60 +214,68 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
     val excessScroll = (scrollOffset - 800f).coerceAtLeast(0f)
     
     var isRefreshing by remember { mutableStateOf(false) }
+    var isPullingAllowed by remember { mutableStateOf(false) }
 
-    val pullThreshold = -70f
-    val maxOverscroll = -100f
+    val pullThreshold = -80f
+    val maxOverscroll = -120f
 
     val scrollableState = rememberScrollableState { delta ->
         if (isRefreshing) return@rememberScrollableState delta
         
+        val prevOffset = scrollOffset
         val newOffset = scrollOffset - delta
         
-        // Prevent accidental pull-to-refresh when scrolling up from the bottom!
-        if (scrollOffset > 0.1f && newOffset < 0f) {
+        // Logic Gate: If scrolling up from content, stop at 0.
+        // Entering overscroll (< 0) requires a distinct gesture starting from 0.
+        if (prevOffset > 0f && newOffset < 0f && !isPullingAllowed) {
             scrollOffset = 0f
-            return@rememberScrollableState delta
+            return@rememberScrollableState (prevOffset)
         }
         
         scrollOffset = newOffset.coerceIn(maxOverscroll, maxScroll)
         delta
     }
 
-    // Trigger state change only
+    // Monitor scroll gesture lifecycle
     LaunchedEffect(scrollableState.isScrollInProgress) {
-        if (!scrollableState.isScrollInProgress && scrollOffset < 0f) {
-            if (scrollOffset <= pullThreshold && !isRefreshing) {
-                isRefreshing = true 
-            } else if (!isRefreshing) {
-                androidx.compose.animation.core.animate(
-                    initialValue = scrollOffset,
-                    targetValue = 0f,
-                    animationSpec = spring(stiffness = 300f)
-                ) { value, _ -> scrollOffset = value }
+        if (scrollableState.isScrollInProgress) {
+            // Gesture started: check if we are allowed to pull
+            isPullingAllowed = scrollOffset <= 1f
+        } else {
+            // Gesture ended: handle snap-back if not refreshing
+            if (scrollOffset < 0f && !isRefreshing) {
+                if (scrollOffset <= pullThreshold) {
+                    isRefreshing = true
+                } else {
+                    androidx.compose.animation.core.animate(
+                        initialValue = scrollOffset,
+                        targetValue = 0f,
+                        animationSpec = spring(stiffness = 500f, dampingRatio = 0.8f)
+                    ) { value, _ -> scrollOffset = value }
+                }
             }
         }
     }
 
-    // Bulletproof isolated refresh block so it never gets stuck!
+    // Handle the refresh process and automatic recoil
     LaunchedEffect(isRefreshing) {
         if (isRefreshing) {
-            // Hold it open
+            // Snap to loading position
             androidx.compose.animation.core.animate(
                 initialValue = scrollOffset,
                 targetValue = pullThreshold,
-                animationSpec = spring(stiffness = 300f)
+                animationSpec = spring(stiffness = 400f, dampingRatio = 0.8f)
             ) { value, _ -> scrollOffset = value }
             
             try {
                 onRefresh()
-                kotlinx.coroutines.delay(1000) 
             } finally {
+                // Execute recoil animation after refresh finishes
                 isRefreshing = false
-                // Automatically unscroll and unblur
                 androidx.compose.animation.core.animate(
                     initialValue = scrollOffset,
                     targetValue = 0f,
-                    animationSpec = spring(stiffness = 300f)
+                    animationSpec = spring(stiffness = 400f, dampingRatio = 0.85f)
                 ) { value, _ -> scrollOffset = value }
             }
         }
@@ -435,8 +443,8 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
             }
         }
 
-        // Smooth pull-blur logic
-        val pullBlurAlpha = if (isRefreshing) 1f else (-scrollOffset / 80f).coerceIn(0f, 1f)
+        // Smooth pull-blur logic that fades as you scroll down
+        val pullBlurAlpha = if (isRefreshing) 1f else ((-scrollOffset / 80f) * (1f - (scrollOffset / 50f).coerceIn(0f, 1f))).coerceIn(0f, 1f)
         val pullBlur = (pullBlurAlpha * 12f).dp
         val overscrollOffset = if (scrollOffset < 0f) (-scrollOffset * 0.4f).dp else 0.dp
 
@@ -446,7 +454,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                 if (data.type == WeatherType.Rain || data.type == WeatherType.Thunderstorm || data.type == WeatherType.Drizzle) {
                     "It feels like ${data.feelsLike ?: "__"}°C today,\nRaining until later. Beware of flood."
                 } else {
-                    "It feels like ${data.feelsLike ?: "__"}°C today,\nRain probability: ${data.rainProb}."
+                    "It feels like ${data.feelsLike ?: "__"}°C today,\nRain probability is probably ${data.rainProb}."
                 }
             } else {
                 val mainEvent = when (data.type) {
