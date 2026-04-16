@@ -19,12 +19,14 @@ Try it on release https://github.com/realidkroo/weatherify/releases/tag/DEV
 or clone this project and compile itt
 To compile this project, you will need:
 
-### 1. Android Development Environment
+### 1. Laptop/pc or anything running Linux/Mac/Windows. 
+
+### 2. Android Development Environment
 - [Android Studio Iguana](https://developer.android.com/studio) or newer.
 - Android SDK 34.
 - Android NDK (installed via Android Studio SDK Manager).
 
-### 2. Rust Toolchain
+### 3. Rust Toolchain
 - [Rustup](https://rustup.rs/) (latest stable).
 - Android targets for Rust:
   ```bash
