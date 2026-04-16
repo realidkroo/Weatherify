@@ -89,7 +89,6 @@ fun DebugMenuScreen(
                 AnimatedOdometerText(
                     temp = if (activeAnimate == -1) null else activeAnimate,
                     snapTo = activeSnap?.let { if (it == -1) -1 else it },
-                    color = Color.White,
                     style = TextStyle(fontSize = 72.sp, fontWeight = FontWeight.Bold, color = Color.White),
                     animationEnabled = true
                 )
@@ -138,7 +137,7 @@ fun DebugMenuScreen(
         ) {
             Column {
                 Text("Enable Clouds", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-                Text("Volumetric procedural cloud layer", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
+                Text("Volumetric cloud layer very laggy", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
             }
             Switch(
                 checked = settings.enableClouds,

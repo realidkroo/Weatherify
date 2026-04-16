@@ -87,60 +87,36 @@ fun OdometerOverlayContent(
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        Icon(
-            imageVector = Icons.Outlined.Animation, 
-            contentDescription = null, 
-            tint = Color.White, 
-            modifier = Modifier.size(48.dp).padding(bottom = 12.dp)
-        )
+        Icon(Icons.Outlined.Animation, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
         Text("Odometer Animation", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Configure target jumps for the 120fps physics engine.", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+        Text("Change it foor the temp on the front :3", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
         
         Spacer(modifier = Modifier.height(32.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp) 
-                .clip(RoundedCornerShape(24.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth(0.9f)
-                    .height(42.dp)
-                    .offset(y = 16.dp) 
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-            )
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text("FROM", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("TARGET", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp))) {
+            // Highlight Box perfectly centered
+            Box(modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.9f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)))
 
             Row(modifier = Modifier.fillMaxSize()) {
                 // ─── FROM SECTION ───
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("FROM", modifier = Modifier.fillMaxWidth().padding(top = 24.dp), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(modifier = Modifier.weight(1f)) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            WheelPicker(options = digitOptions, selectedIndex = fromTens, onIndexSelected = { fromTens = it })
-                        }
-                        Box(modifier = Modifier.weight(1f)) {
-                            WheelPicker(options = digitOptions, selectedIndex = fromOnes, onIndexSelected = { fromOnes = it })
-                        }
-                    }
+                Row(modifier = Modifier.weight(1f)) {
+                    Box(modifier = Modifier.weight(1f)) { WheelPicker(options = digitOptions, selectedIndex = fromTens, onIndexSelected = { fromTens = it }) }
+                    Box(modifier = Modifier.weight(1f)) { WheelPicker(options = digitOptions, selectedIndex = fromOnes, onIndexSelected = { fromOnes = it }) }
                 }
                 
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).align(Alignment.CenterVertically).background(Color.White.copy(alpha = 0.1f)))
 
                 // ─── TARGET SECTION ───
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("TARGET", modifier = Modifier.fillMaxWidth().padding(top = 24.dp), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Row(modifier = Modifier.weight(1f)) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            WheelPicker(options = digitOptions, selectedIndex = targetTens, onIndexSelected = { targetTens = it })
-                        }
-                        Box(modifier = Modifier.weight(1f)) {
-                            WheelPicker(options = digitOptions, selectedIndex = targetOnes, onIndexSelected = { targetOnes = it })
-                        }
-                    }
+                Row(modifier = Modifier.weight(1f)) {
+                    Box(modifier = Modifier.weight(1f)) { WheelPicker(options = digitOptions, selectedIndex = targetTens, onIndexSelected = { targetTens = it }) }
+                    Box(modifier = Modifier.weight(1f)) { WheelPicker(options = digitOptions, selectedIndex = targetOnes, onIndexSelected = { targetOnes = it }) }
                 }
             }
         }
@@ -149,16 +125,8 @@ fun OdometerOverlayContent(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(Color.White)
-                    .clickable {
-                        onTest(getVal(fromTens, fromOnes), getVal(targetTens, targetOnes))
-                    }
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
-            ) {
-                Text("Test", color = Color.Black, fontWeight = FontWeight.Bold)
-            }
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White).clickable { onTest(getVal(fromTens, fromOnes), getVal(targetTens, targetOnes)) }.padding(horizontal = 24.dp, vertical = 12.dp)
+            ) { Text("Test Animation", color = Color.Black, fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -166,58 +134,55 @@ fun OdometerOverlayContent(
 @Composable
 fun ExperimentalOverlayContent(
     settings: AppSettings,
+    currentWeather: WeatherType,
     onUpdate: (AppSettings) -> Unit,
     onWeatherSelect: (WeatherType) -> Unit
 ) {
     val weatherTypes = WeatherType.entries.toTypedArray()
     val visualStates = VisualState.entries.toTypedArray()
 
+    // Default to the currently applied weather and time of day!
+    var selectedWeather by remember { mutableIntStateOf(weatherTypes.indexOf(currentWeather).coerceAtLeast(0)) }
+    var selectedVisual by remember { mutableIntStateOf(visualStates.indexOf(settings.visualStateOverride).coerceAtLeast(0)) }
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        Icon(
-            imageVector = Icons.Default.Science, 
-            contentDescription = null, 
-            tint = Color.White, 
-            modifier = Modifier.size(48.dp).padding(bottom = 12.dp)
-        )
+        Icon(Icons.Default.Science, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
         Text("Experimental Menu", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-        Text("Modify weather and time visual states in real-time.", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+        Text("Modify weather and time visual states", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
         
         Spacer(modifier = Modifier.height(32.dp))
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp)
-                .clip(RoundedCornerShape(24.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth(0.9f)
-                    .height(42.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-            )
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text("WEATHER", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("TIME OF DAY", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp))) {
+            Box(modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.9f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)))
 
             Row(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.weight(1f)) {
-                    WheelPicker(
-                        options = weatherTypes.map { it.title },
-                        selectedIndex = weatherTypes.indexOfFirst { it.title == "Clear" }.coerceAtLeast(0),
-                        onIndexSelected = { onWeatherSelect(weatherTypes[it]) }
-                    )
+                    WheelPicker(options = weatherTypes.map { it.title }, selectedIndex = selectedWeather, onIndexSelected = { selectedWeather = it })
                 }
-                
                 Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).align(Alignment.CenterVertically).background(Color.White.copy(alpha = 0.1f)))
-
                 Box(modifier = Modifier.weight(1f)) {
-                    WheelPicker(
-                        options = visualStates.map { it.title },
-                        selectedIndex = visualStates.indexOf(settings.visualStateOverride).coerceAtLeast(0),
-                        onIndexSelected = { onUpdate(settings.copy(visualStateOverride = visualStates[it])) }
-                    )
+                    WheelPicker(options = visualStates.map { it.title }, selectedIndex = selectedVisual, onIndexSelected = { selectedVisual = it })
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+            Box(
+                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White)
+                    .clickable {
+                        onWeatherSelect(weatherTypes[selectedWeather])
+                        onUpdate(settings.copy(visualStateOverride = visualStates[selectedVisual]))
+                    }.padding(horizontal = 24.dp, vertical = 12.dp)
+            ) { Text("Apply Options", color = Color.Black, fontWeight = FontWeight.Bold) }
         }
     }
 }
@@ -390,7 +355,7 @@ fun SettingsScreen(
                             )
                             SettingsItemOverlay(
                                 title = "Odometer Test",
-                                subtitle = "Test the scrolling number physics",
+                                subtitle = "Test the scrolling number",
                                 icon = Icons.Outlined.Animation,
                                 onClick = { onOpenOverlay(OverlayType.Odometer) }
                             )
@@ -829,6 +794,7 @@ fun HeaderTypeSelectionContent(settings: AppSettings, onSelect: (HeaderType) -> 
 fun OverlayContent(
     overlayType: OverlayType, 
     settings: AppSettings, 
+    currentWeather: WeatherType = WeatherType.Clear, // <-- Added default param here
     onUpdateSettings: (AppSettings) -> Unit, 
     onOpenNested: (NestedOverlay) -> Unit,
     onWeatherSelect: (WeatherType) -> Unit = {},
@@ -1031,8 +997,8 @@ fun OverlayContent(
                                 Box(modifier = Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer))
                                 Spacer(modifier = Modifier.width(20.dp))
                                 Column {
-                                    Text("BUILD 0.28", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.SansSerif)
-                                    Text("Release-DEV-02", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
+                                    Text("BUILD 0.28", color = MaterialTheme.colorScheme.onSurface, fontSize = 20.sp, fontFamily = FontFamily.Monospace)
+                                    Text("Release-DEV-03", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp, fontFamily = FontFamily.Monospace)
                                 }
                             }
                         }
@@ -1073,6 +1039,7 @@ fun OverlayContent(
                 }
                 OverlayType.Experimental -> ExperimentalOverlayContent(
                     settings = settings,
+                    currentWeather = currentWeather,
                     onUpdate = onUpdateSettings,
                     onWeatherSelect = onWeatherSelect
                 )

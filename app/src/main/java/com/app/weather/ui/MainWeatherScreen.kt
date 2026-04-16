@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -692,7 +693,6 @@ fun MainWeatherScreen(
         AnimatedOdometerText(
             temp = displayTemp,
             snapTo = forceSnap,
-            color = contentColor,
             style = TextStyle(fontSize = 130.sp, fontWeight = FontWeight.Bold, color = contentColor),
             animationEnabled = settings.animation,
             modifier = Modifier.graphicsLayer {
@@ -711,7 +711,7 @@ fun MainWeatherScreen(
 
         val providerName = settings.provider.lowercase()
         val cityInfoStr = if (settings.headerType == HeaderType.Standard) "" else "${data.location.lowercase()} - "
-        val updateText = "${cityInfoStr}Updated at ${data.lastUpdated} from $providerName"
+        val updateText = "${cityInfoStr} Updated at ${data.lastUpdated} from $providerName"
 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.wrapContentWidth().graphicsLayer {
             val prog = smoothProgress.value
@@ -732,95 +732,166 @@ fun MainWeatherScreen(
 @Composable
 fun AnimatedOdometerText(
     temp: Int?,
-    color: Color,
     style: TextStyle,
     modifier: Modifier = Modifier,
     snapTo: Int? = null,
     animationEnabled: Boolean = true
 ) {
-    val targetVal = temp?.toFloat() ?: -1f
-    val anim = remember { Animatable(snapTo?.toFloat() ?: targetVal) }
+    val textStr = temp?.toString() ?: "__"
+    val snapStr = snapTo?.toString()
+    
+    // Pad strings so the digits align properly based on place value
+    val maxLength = max(textStr.length, snapStr?.length ?: 0).coerceAtLeast(2)
+    val paddedText = textStr.padStart(maxLength, ' ')
+    val paddedSnap = snapStr?.padStart(maxLength, ' ')
 
-    LaunchedEffect(snapTo) {
-        snapTo?.let { anim.snapTo(it.toFloat()) }
+    // Masking modifier for the invisible fading at top and bottom
+    val maskModifier = modifier.graphicsLayer {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }.drawWithContent {
+        drawContent()
+        drawRect(
+            brush = Brush.verticalGradient(
+                0f to Color.Transparent,
+                0.2f to Color.Black,
+                0.8f to Color.Black,
+                1f to Color.Transparent
+            ),
+            blendMode = BlendMode.DstIn
+        )
     }
-
-    LaunchedEffect(targetVal, snapTo) {
-        if (snapTo == null && anim.targetValue != targetVal) {
-            if (animationEnabled) {
-                anim.animateTo(targetVal, spring(dampingRatio = 0.95f, stiffness = 50f))
-            } else {
-                anim.snapTo(targetVal)
-            }
-        }
-    }
-
-    val textMeasurer = rememberTextMeasurer()
-    val heightPx = remember(style) { textMeasurer.measure("0", style).size.height.toFloat() }
 
     Row(
-        modifier = modifier, 
-        verticalAlignment = Alignment.Top, 
+        modifier = maskModifier.animateContentSize(),
+        verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.Start
     ) {
+        paddedText.forEachIndexed { index, char ->
+            val snapChar = paddedSnap?.getOrNull(index)
+            
+            DigitColumn(
+                targetChar = char,
+                snapChar = snapChar,
+                style = style,
+                animationEnabled = animationEnabled,
+                // Left digit moves first => delay increases with index
+                delayMillis = index * 150 
+            )
+        }
+        Text("°", style = style)
+    }
+}
+
+@Composable
+private fun DigitColumn(
+    targetChar: Char,
+    snapChar: Char?,
+    style: TextStyle,
+    animationEnabled: Boolean,
+    delayMillis: Int
+) {
+    val textMeasurer = rememberTextMeasurer()
+    
+    // Use a fixed width based on the widest digit (usually 0 or 8) to prevent horizontal jitter
+    val charWidthPx = remember(style) {
+        (0..9).maxOf { textMeasurer.measure(it.toString(), style).size.width }
+    }
+    val heightPx = remember(style) { 
+        textMeasurer.measure("0", style).size.height.toFloat() 
+    }
+
+    // Handle non-digit characters (like minus signs or spaces)
+    if (!targetChar.isDigit()) {
         Box(
             modifier = Modifier.layout { measurable, constraints ->
-                val placeable = measurable.measure(constraints)
-                val currentValue = anim.value
-                val w = if (currentValue < 0) {
-                    textMeasurer.measure("__", style).size.width.toFloat()
-                } else {
-                    val floorVal = floor(currentValue).toInt()
-                    val ceilVal = ceil(currentValue).toInt()
-                    val fraction = currentValue - floorVal
-                    val w1 = textMeasurer.measure(floorVal.toString(), style).size.width.toFloat()
-                    val w2 = textMeasurer.measure(ceilVal.toString(), style).size.width.toFloat()
-                    w1 + (w2 - w1) * fraction
-                }
-                // Explicitly report our exact interpolated width so the box never collapses!
-                layout(w.roundToInt(), placeable.height) {
-                    placeable.place(0, 0)
-                }
+                val p = measurable.measure(constraints)
+                val w = if (targetChar == ' ') 0 else p.width
+                layout(w, p.height) { p.place(0, 0) }
             },
-            contentAlignment = Alignment.CenterStart
+            contentAlignment = Alignment.Center
         ) {
-            // Invisible structural placeholder to ensure placeable.height isn't zero
-            Text("0", style = style, color = Color.Transparent)
+            Text(if (targetChar == ' ') "" else targetChar.toString(), style = style)
+        }
+        return
+    }
 
-            val currentValue = anim.value
-            val minIdx = (floor(currentValue) - 2).toInt()
-            val maxIdx = (ceil(currentValue) + 2).toInt()
+    val targetDigit = targetChar.digitToInt().toFloat()
+    val anim = remember { Animatable(snapChar?.digitToIntOrNull()?.toFloat() ?: targetDigit) }
 
-            for (i in minIdx..maxIdx) {
-                val text = if (i == -1) "__" else if (i < -1) "" else i.toString()
-                if (text.isNotEmpty()) {
-                    val offset = (i - currentValue) * heightPx
-                    val absOffset = abs(i - currentValue)
-                    
-                    val itemAlpha = (1f - absOffset).coerceIn(0f, 1f)
-                    val itemBlur = (absOffset * 20f).coerceIn(0f, 20f)
+    LaunchedEffect(snapChar) {
+        if (snapChar != null && snapChar.isDigit()) {
+            anim.snapTo(snapChar.digitToInt().toFloat())
+        }
+    }
 
-                    Text(
-                        text = text,
-                        style = style,
-                        modifier = Modifier.graphicsLayer {
-                            translationY = offset
-                            alpha = itemAlpha
-                            
-                            if (itemBlur > 0.1f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                renderEffect = android.graphics.RenderEffect.createBlurEffect(
-                                    itemBlur, itemBlur, android.graphics.Shader.TileMode.DECAL
-                                ).asComposeRenderEffect()
-                            } else {
-                                renderEffect = null
-                            }
-                        }
-                    )
+    LaunchedEffect(targetDigit, snapChar) {
+        if (snapChar == null) {
+            val currentMod = anim.value % 10f
+            val currentWrapped = if (currentMod < 0) currentMod + 10f else currentMod
+            var diff = targetDigit - currentWrapped
+            
+            // Spin via the shortest path (e.g., 9 -> 0 spins forward by 1 instead of backward by 9)
+            if (diff > 5f) diff -= 10f
+            if (diff < -5f) diff += 10f
+            
+            val finalTarget = anim.value + diff
+            
+            // Unchanged digits won't trigger an animation!
+            if (abs(anim.targetValue - finalTarget) > 0.01f) {
+                if (animationEnabled) {
+                    delay(delayMillis.toLong())
+                    anim.animateTo(finalTarget, spring(dampingRatio = 0.95f, stiffness = 60f))
+                } else {
+                    anim.snapTo(finalTarget)
                 }
             }
         }
-        
-        Text("°", style = style)
+    }
+
+    Box(
+        modifier = Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            layout(charWidthPx, placeable.height) {
+                // Center the dynamic digit inside the stable column width
+                placeable.place((charWidthPx - placeable.width) / 2, 0)
+            }
+        },
+        contentAlignment = Alignment.Center
+    ) {
+        // Invisible structural placeholder
+        Text("0", style = style, color = Color.Transparent)
+
+        val currentValue = anim.value
+        val minIdx = (floor(currentValue) - 2).toInt()
+        val maxIdx = (ceil(currentValue) + 2).toInt()
+
+        for (i in minIdx..maxIdx) {
+            val displayDigit = (i % 10).let { if (it < 0) it + 10 else it }
+            val offset = (i - currentValue) * heightPx
+            val absOffset = abs(i - currentValue)
+
+            val itemAlpha = (1f - (absOffset * 0.55f)).coerceIn(0f, 1f)
+            val itemBlur = (absOffset * 10f).coerceIn(0f, 20f)
+
+            // Only render visible items for strict optimization
+            if (itemAlpha > 0f) {
+                Text(
+                    text = displayDigit.toString(),
+                    style = style,
+                    modifier = Modifier.graphicsLayer {
+                        translationY = offset
+                        alpha = itemAlpha
+                        if (itemBlur > 0.1f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                itemBlur, itemBlur, android.graphics.Shader.TileMode.DECAL
+                            ).asComposeRenderEffect()
+                        } else {
+                            renderEffect = null
+                        }
+                    }
+                )
+            }
+        }
     }
 }
 

@@ -552,6 +552,10 @@ fun WeatherAppRoot() {
                         OverlayContent(
                             overlayType = displayedOverlay,
                             settings = settings,
+                            currentWeather = weatherData.type,
+                            onWeatherSelect = { 
+                                weatherData = weatherData.copy(type = it, description = "forced ${it.title.lowercase()}")
+                            },
                             onUpdateSettings = { settings = it },
                             onOpenNested = { activeNestedOverlay = it },
                             onTestOdometer = { f, t ->
