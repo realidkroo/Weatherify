@@ -194,7 +194,7 @@ object WeatherCache {
 // ─── Backend ──────────────────────────────────────────────────────────────────
 
 object WeatherBackend {
-    private var openWeatherApiKey = "YOUR_API_KEY_HERE"
+    private var openWeatherApiKey = "" // Enter your API key here or in settings
     private var currentProvider = "OpenWeather"
 
     suspend fun fetchWeather(city: String = "Jakarta"): WeatherData = withContext(Dispatchers.IO) {

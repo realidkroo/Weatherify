@@ -58,7 +58,9 @@ data class AppSettings(
     val appIcon:      AppIcon    = AppIcon.Day,
     val enableClouds: Boolean    = false,
     val debugRotateWindSpeed: Boolean = false,
-    val provider:     String     = "OpenWeather"
+    val provider:     String     = "OpenWeather",
+    val locationBasedWeather: Boolean = true,
+    val demoMode:     Boolean    = false
 )
 
 @SuppressLint("MissingPermission")
@@ -124,19 +126,40 @@ fun WeatherAppRoot() {
         } else loadWeatherForLocation(null, null)
     }
 
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
-                .addOnSuccessListener { loc ->
-                    if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
-                    else loadWeatherForLocation(null, null)
-                }
-        } else {
-            permissionLauncher.launch(
-                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+    fun refreshWeather() {
+        if (settings.demoMode) {
+            weatherData = WeatherData.Default.copy(
+                location = "Demo City",
+                description = "Demo Mode Active",
+                temp = 24,
+                feelsLike = 26,
+                humidity = "65%",
+                wind = "12 km/h",
+                rainProb = "Low",
+                lastUpdated = "Just now",
+                type = WeatherType.Clear
             )
+            return
         }
+
+        if (settings.locationBasedWeather) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                    .addOnSuccessListener { loc ->
+                        if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
+                        else loadWeatherForLocation(null, null)
+                    }
+                    .addOnFailureListener { loadWeatherForLocation(null, null) }
+            } else {
+                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
+        } else {
+            loadWeatherForLocation(null, null)
+        }
+    }
+
+    LaunchedEffect(settings.locationBasedWeather, settings.demoMode, settings.provider) {
+        refreshWeather()
     }
 
     val dynamicBarBg by animateColorAsState(
@@ -191,7 +214,11 @@ fun WeatherAppRoot() {
 
     val renderDestination: @Composable (Destination) -> Unit = { dest ->
         when (dest) {
-            Destination.Weather  -> MainWeatherScreen(data = weatherData, settings = settings)
+            Destination.Weather  -> MainWeatherScreen(
+                data = weatherData, 
+                settings = settings,
+                onRefresh = { refreshWeather() }
+            )
             Destination.Search   -> SearchScreen(onBack = { handleBack(NavType.Pop) })
             Destination.Settings -> SettingsScreen(
                 settings            = settings,
@@ -205,7 +232,6 @@ fun WeatherAppRoot() {
         }
     }
 
-    // App scales down twice: once for the main overlay, and a bit more for the nested one
     val backgroundAppScale  = 1f - 0.08f * overlayProgress.value - 0.05f * stackedOverlayProgress.value
     val backgroundAppBlur   = (12f * overlayProgress.value + 8f * stackedOverlayProgress.value).dp
     val backgroundAppRadius = (32f * overlayProgress.value + 16f * stackedOverlayProgress.value).dp
@@ -368,7 +394,6 @@ fun WeatherAppRoot() {
                     .align(Alignment.BottomCenter)
                     .onGloballyPositioned { primaryOverlayHeightPx = it.size.height.toFloat() }
                     .graphicsLayer {
-                        // Scales down but NO extra translation upward
                         scaleX = 1f - 0.06f * stackedOverlayProgress.value
                         scaleY = 1f - 0.06f * stackedOverlayProgress.value
                         translationY = ((1f - overlayProgress.value) * primaryOverlayHeightPx)

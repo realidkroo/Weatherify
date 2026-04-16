@@ -207,15 +207,70 @@ private fun FullWidgetBox(
 @SuppressLint("SetJavaScriptEnabled")
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
+fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () -> Unit = {}) {
     var scrollOffset by remember { mutableFloatStateOf(0f) }
     val maxScroll = 6000f
     val density = LocalDensity.current
     val excessScroll = (scrollOffset - 800f).coerceAtLeast(0f)
+    
+    var isRefreshing by remember { mutableStateOf(false) }
+
+    val pullThreshold = -70f
+    val maxOverscroll = -100f
 
     val scrollableState = rememberScrollableState { delta ->
-        scrollOffset = (scrollOffset - delta).coerceIn(0f, maxScroll)
+        if (isRefreshing) return@rememberScrollableState delta
+        
+        val newOffset = scrollOffset - delta
+        
+        // Prevent accidental pull-to-refresh when scrolling up from the bottom!
+        if (scrollOffset > 0.1f && newOffset < 0f) {
+            scrollOffset = 0f
+            return@rememberScrollableState delta
+        }
+        
+        scrollOffset = newOffset.coerceIn(maxOverscroll, maxScroll)
         delta
+    }
+
+    // Trigger state change only
+    LaunchedEffect(scrollableState.isScrollInProgress) {
+        if (!scrollableState.isScrollInProgress && scrollOffset < 0f) {
+            if (scrollOffset <= pullThreshold && !isRefreshing) {
+                isRefreshing = true 
+            } else if (!isRefreshing) {
+                androidx.compose.animation.core.animate(
+                    initialValue = scrollOffset,
+                    targetValue = 0f,
+                    animationSpec = spring(stiffness = 300f)
+                ) { value, _ -> scrollOffset = value }
+            }
+        }
+    }
+
+    // Bulletproof isolated refresh block so it never gets stuck!
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            // Hold it open
+            androidx.compose.animation.core.animate(
+                initialValue = scrollOffset,
+                targetValue = pullThreshold,
+                animationSpec = spring(stiffness = 300f)
+            ) { value, _ -> scrollOffset = value }
+            
+            try {
+                onRefresh()
+                kotlinx.coroutines.delay(1000) 
+            } finally {
+                isRefreshing = false
+                // Automatically unscroll and unblur
+                androidx.compose.animation.core.animate(
+                    initialValue = scrollOffset,
+                    targetValue = 0f,
+                    animationSpec = spring(stiffness = 300f)
+                ) { value, _ -> scrollOffset = value }
+            }
+        }
     }
 
     val headerProgress = (scrollOffset / 800f).coerceIn(0f, 1f)
@@ -249,7 +304,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
     val contentBlockAlpha = (1f - smoothProgress * 1.5f).coerceIn(0f, 1f)
     val contentBlockBlur  = (20f * smoothProgress.coerceAtLeast(0f)).dp
 
-    // Sky colors
     val skyTopColor by animateColorAsState(when (data.type) {
         WeatherType.Clear        -> Color(0xFF4A90E2)
         WeatherType.Clouds       -> Color(0xFF6A8296)
@@ -336,15 +390,63 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
             })
         }
 
-        // ── Header & widgets ───────────────────────────────────────────────
-        Box(modifier = Modifier.fillMaxWidth().height(8000.dp)) {
+        // ── Pull to Refresh UI ──────────────────────────────────────────────
+        if (scrollOffset < 0f || isRefreshing) {
+            val alpha = if (isRefreshing) 1f else (-scrollOffset / 60f).coerceIn(0f, 1f)
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(100.dp)
+                    .alpha(alpha),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                val refreshText = when {
+                    isRefreshing -> "Refreshing..."
+                    scrollOffset <= pullThreshold + 5f -> "Release to refresh"
+                    else -> "Pull to refresh"
+                }
+                
+                val infiniteTransition = rememberInfiniteTransition(label = "")
+                val loadingRotation by infiniteTransition.animateFloat(
+                    initialValue = 0f, targetValue = 360f,
+                    animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)), label = ""
+                )
+                val iconRotation = if (isRefreshing) loadingRotation else -scrollOffset * 3f
 
-            // Quote / description block
+                Row(
+                    modifier = Modifier.padding(top = 60.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Refresh",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = iconRotation }
+                    )
+                    Text(
+                        text = refreshText,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        // Smooth pull-blur logic
+        val pullBlurAlpha = if (isRefreshing) 1f else (-scrollOffset / 80f).coerceIn(0f, 1f)
+        val pullBlur = (pullBlurAlpha * 12f).dp
+        val overscrollOffset = if (scrollOffset < 0f) (-scrollOffset * 0.4f).dp else 0.dp
+
+        Box(modifier = Modifier.fillMaxWidth().height(8000.dp).offset(y = overscrollOffset).blur(pullBlur)) {
+
             val dynamicQuote = if (settings.quoteStyle == QuoteStyle.Compact) {
                 if (data.type == WeatherType.Rain || data.type == WeatherType.Thunderstorm || data.type == WeatherType.Drizzle) {
                     "It feels like ${data.feelsLike ?: "__"}°C today,\nRaining until later. Beware of flood."
                 } else {
-                    "It feels like ${data.feelsLike ?: "__"}°C today,\nProbability of rain is ${data.rainProb}."
+                    "It feels like ${data.feelsLike ?: "__"}°C today,\nRain probability: ${data.rainProb}."
                 }
             } else {
                 val mainEvent = when (data.type) {
@@ -363,18 +465,20 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                     data.feelsLike < 28   -> "nice and pleasant outside"
                     else                  -> "quite hot, stay hydrated"
                 }
-                "$mainEvent It's ${data.description} right now in ${data.location}, visibility is ${data.visibility}. The temperature feels like ${data.feelsLike ?: "__"}°C ($feelScenario). Today's rain probability is ${data.rainProb}."
+                "$mainEvent It's ${data.description} right now in ${data.location}, visibility is ${data.visibility}. The temperature feels like ${data.feelsLike ?: "__"}°C ($feelScenario). Rain probability: ${data.rainProb}."
             }
 
             Column(modifier = Modifier.fillMaxWidth().offset(y = contentBlockY).padding(horizontal = 32.dp).alpha(contentBlockAlpha).blur(if (settings.blur) contentBlockBlur else 0.dp)) {
                 Text(text = dynamicQuote, color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(24.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                
+                // Smaller pill spacing (4.dp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     val infiniteTransition = rememberInfiniteTransition(label = "")
                     val windRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(animation = tween(2000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
                     val metrics = listOf(Pair(Icons.Default.FilterDrama, data.aqi), Pair(Icons.Default.NorthEast, data.wind), Pair(Icons.Default.Visibility, data.visibility), Pair(Icons.Default.WaterDrop, data.humidity))
                     metrics.forEach { (icon, label) ->
-                        Row(modifier = Modifier.clip(RoundedCornerShape(percent = 50)).background(Color.White.copy(alpha = 0.15f)).padding(horizontal = 10.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Row(modifier = Modifier.clip(RoundedCornerShape(percent = 50)).background(Color.White.copy(alpha = 0.15f)).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = windRotation })
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -383,15 +487,15 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                 }
             }
 
-            // Updated-at row (center → left on scroll, pinned once docked)
             val excessDp = with(density) { excessScroll.toDp() }
-            val updateY = (600f - 510f * smoothProgress).dp
             val providerName = settings.provider.lowercase()
             val cityInfoStr = if (settings.headerType == HeaderType.Standard) "" else "${data.location.lowercase()} - "
             val updateText = "${cityInfoStr}Updated at ${data.lastUpdated} from $providerName"
 
-            // ── Widgets column ─────────────────────────────────────────────
-            val widgetYBase = (650f - 500f * smoothProgress).dp
+            // Nudged 'updateY' text to be neatly on top of the widget
+            val updateY = (640f - 550f * smoothProgress).dp
+
+            val widgetYBase = (680f - 500f * smoothProgress).dp
             val widgetY = widgetYBase - excessDp
             val widgetBg = remember { Color.White.copy(alpha = 0.15f) }
 
@@ -406,7 +510,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
             Column(modifier = Modifier.fillMaxWidth().offset(y = widgetY).padding(horizontal = 24.dp)) {
 
-                // ── Hourly forecast ────────────────────────────────────────
                 FullWidgetBox(icon = Icons.Default.WatchLater, label = "Hourly forecast") {
                     Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         data.hourlyForecast.forEach { item ->
@@ -423,7 +526,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 10-Day forecast ────────────────────────────────────────
                 FullWidgetBox(icon = Icons.Default.DateRange, label = "10-Day forecast") {
                     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         data.dailyForecast.forEach { item ->
@@ -433,7 +535,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                                 Spacer(Modifier.weight(0.5f))
                                 Text(item.tempMin, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                 Spacer(Modifier.width(8.dp))
-                                // temp bar
                                 Box(modifier = Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
                                     val pop = item.pop / 100f
                                     Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(pop.coerceIn(0.05f, 1f)).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.7f)))
@@ -447,11 +548,8 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 2-column grid: Precipitation + Humidity ────────────────
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Precipitation
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.WaterDrop, "Precipitation")
                             Spacer(Modifier.height(8.dp))
@@ -459,7 +557,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                             Text("${String.format("%.1f", precipMm)} mm", color = Color.White, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                             Text("expected today", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
                             Spacer(Modifier.weight(1f))
-                            // progress bar
                             val frac = (precipMm / 50.0).coerceIn(0.0, 1.0).toFloat()
                             Box(modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.2f))) {
                                 Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(frac.coerceAtLeast(0.03f)).clip(RoundedCornerShape(50)).background(Color(0xFF81D4FA)))
@@ -467,8 +564,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         }
                     }
 
-                    // Humidity
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.WaterDrop, "Humidity")
                             Spacer(Modifier.height(8.dp))
@@ -490,11 +586,8 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 2-column grid: Feels Like + UV Index ───────────────────
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Feels Like
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.DeviceThermostat, "Feels like")
                             Spacer(Modifier.height(8.dp))
@@ -504,8 +597,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         }
                     }
 
-                    // UV Index
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.WbSunny, "UV Index")
                             Spacer(Modifier.height(8.dp))
@@ -539,7 +631,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Location Map ──────────────────────────────────────────
                 if (data.lat != null && data.lon != null) {
                     val lat = data.lat
                     val lon = data.lon
@@ -571,8 +662,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                             },
                             modifier = Modifier.fillMaxSize()
                         )
-
-                        // Label overlay
                         Box(modifier = Modifier.align(Alignment.TopStart).padding(12.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x99000000)).padding(horizontal = 10.dp, vertical = 4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Place, contentDescription = null, tint = Color(0xFF81D4FA), modifier = Modifier.size(12.dp))
@@ -585,11 +674,8 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 2-column grid: Wind + Air Quality ─────────────────────
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Wind compass
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             WidgetLabel(Icons.Default.NorthEast, "Wind")
                             Spacer(Modifier.height(6.dp))
@@ -598,16 +684,13 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                                 val cx = size.width / 2
                                 val cy = size.height / 2
                                 val r = size.width / 2 - 4.dp.toPx()
-                                // circle
                                 drawCircle(color = Color.White.copy(alpha = 0.15f), radius = r)
-                                // cardinal points dots
                                 for (d in 0..315 step 45) {
                                     val rd = Math.toRadians(d.toDouble())
                                     val px = cx + (r - 6.dp.toPx()) * sin(rd).toFloat()
                                     val py = cy - (r - 6.dp.toPx()) * cos(rd).toFloat()
                                     drawCircle(color = Color.White.copy(alpha = 0.4f), radius = 2.dp.toPx(), center = Offset(px, py))
                                 }
-                                // arrow
                                 val rad = Math.toRadians(deg.toDouble())
                                 val tip = Offset(cx + (r - 8.dp.toPx()) * sin(rad).toFloat(), cy - (r - 8.dp.toPx()) * cos(rad).toFloat())
                                 val tail = Offset(cx - 20.dp.toPx() * sin(rad).toFloat(), cy + 20.dp.toPx() * cos(rad).toFloat())
@@ -619,8 +702,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         }
                     }
 
-                    // Air Quality
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.FilterDrama, "Air Quality")
                             Spacer(Modifier.height(8.dp))
@@ -642,11 +724,8 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── 2-column grid: Visibility + Pressure ──────────────────
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-
-                    // Visibility
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column {
                             WidgetLabel(Icons.Default.Visibility, "Visibility")
                             Spacer(Modifier.height(8.dp))
@@ -662,17 +741,14 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         }
                     }
 
-                    // Pressure dial
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
+                    Box(modifier = Modifier.weight(1f).height(175.dp).clip(RoundedCornerShape(24.dp)).background(widgetBg).padding(16.dp)) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             WidgetLabel(Icons.Default.Compress, "Pressure")
                             Spacer(Modifier.height(6.dp))
                             val pHpa = data.pressure ?: 1013
-                            // dial
                             Canvas(modifier = Modifier.size(70.dp)) {
                                 val cx = size.width / 2; val cy = size.height / 2
                                 val r = size.width / 2 - 4.dp.toPx()
-                                // tick marks
                                 for (t in 0..120 step 10) {
                                     val ang = Math.toRadians(180.0 + t * 1.5)
                                     val inner = r - 8.dp.toPx()
@@ -680,7 +756,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                                     val px2 = cx + r * cos(ang).toFloat(); val py2 = cy + r * sin(ang).toFloat()
                                     drawLine(Color.White.copy(alpha = 0.3f), Offset(px1, py1), Offset(px2, py2), strokeWidth = 1.5f)
                                 }
-                                // needle (950..1050 -> 0..180 deg sweep)
                                 val norm = ((pHpa - 950) / 100f).coerceIn(0f, 1f)
                                 val needleAng = Math.toRadians(180.0 + norm * 180.0)
                                 val nx = cx + (r - 10.dp.toPx()) * cos(needleAng).toFloat()
@@ -699,12 +774,10 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Sunrise / Sunset widget (full width) ───────────────────
                 FullWidgetBox(icon = Icons.Default.WbSunny, label = "Sunrise & Sunset") {
                     val sunriseStr = if (data.sunriseEpoch != null) epochToTimeStr(data.sunriseEpoch) else "--"
                     val sunsetStr  = if (data.sunsetEpoch  != null) epochToTimeStr(data.sunsetEpoch)  else "--"
 
-                    // Calculate sun arc progress
                     val nowMs = System.currentTimeMillis() / 1000L
                     val sunProgress = if (data.sunriseEpoch != null && data.sunsetEpoch != null && nowMs in data.sunriseEpoch..data.sunsetEpoch) {
                         ((nowMs - data.sunriseEpoch).toFloat() / (data.sunsetEpoch - data.sunriseEpoch).toFloat()).coerceIn(0f, 1f)
@@ -715,7 +788,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                         val arcLeft = 16.dp.toPx(); val arcRight = w - 16.dp.toPx()
                         val arcTop = 8.dp.toPx(); val arcBottom = h + 20.dp.toPx()
 
-                        // dashed horizon line
                         val dashW = 6.dp.toPx(); val gapW = 4.dp.toPx()
                         var x = arcLeft
                         while (x < arcRight) {
@@ -723,19 +795,14 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                             x += dashW + gapW
                         }
 
-                        // arc path
                         val path = Path().apply {
                             moveTo(arcLeft, h - 20.dp.toPx())
                             cubicTo(arcLeft, arcTop, arcRight, arcTop, arcRight, h - 20.dp.toPx())
                         }
                         drawPath(path, color = Color.White.copy(alpha = 0.3f), style = Stroke(width = 2.dp.toPx()))
 
-                        // sun dot on arc
                         val t = sunProgress
                         val sunX = arcLeft + (arcRight - arcLeft) * t
-                        val sunY = h - 20.dp.toPx() -
-                            (3 * (1 - t) * t * t * (h - 20.dp.toPx() - arcTop) + 3 * t * t * (1 - t) * (h - 20.dp.toPx() - arcTop)) // approx parabola
-                        // Simplified: parabola
                         val sunYSimple = h - 20.dp.toPx() - (4 * t * (1 - t)) * (h - arcTop - 20.dp.toPx())
                         drawCircle(Color.White, radius = 8.dp.toPx(), center = Offset(sunX, sunYSimple))
                         drawCircle(Color(0xFFFFECB3), radius = 5.dp.toPx(), center = Offset(sunX, sunYSimple))
@@ -756,7 +823,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Rainfall widget (full width) ───────────────────────────
                 FullWidgetBox(icon = Icons.Default.WaterDrop, label = "Rainfall") {
                     val last24 = data.rainfallLast24h ?: 0.0
                     val next24 = data.rainfallNext24h ?: 0.0
@@ -771,7 +837,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // ── Moon Phase widget (full width) ─────────────────────────
                 FullWidgetBox(icon = Icons.Default.NightsStay, label = "Moon Phase") {
                     val phase = data.moonPhase ?: 0.0
                     val phaseName = when {
@@ -786,28 +851,21 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                        // Moon disk drawn with Canvas
                         Canvas(modifier = Modifier.size(72.dp)) {
                             val cx = size.width / 2; val cy = size.height / 2; val r = size.width / 2 - 2.dp.toPx()
-                            // dark background circle
                             drawCircle(Color.White.copy(alpha = 0.1f), radius = r)
-                            // illuminated portion (simplified as fraction fill)
                             val illumination = when {
-                                phase <= 0.5 -> phase * 2  // waxing: 0→1
-                                else -> (1.0 - phase) * 2  // waning: 1→0
+                                phase <= 0.5 -> phase * 2  
+                                else -> (1.0 - phase) * 2  
                             }
                             val litColor = Color(0xFFFFECB3)
                             val shadowColor = Color(0xFF1A1A2E)
-                            // Draw full moon circle first
                             drawCircle(litColor.copy(alpha = 0.9f), radius = r)
-                            // Overlay shadow to simulate phase
                             if (phase < 0.5) {
-                                // Waxing: shadow on left side
                                 val shadowFrac = (1.0 - illumination).toFloat()
                                 val shadowXOffset = (shadowFrac * 2 - 1) * r
                                 drawCircle(shadowColor, radius = r, center = Offset(cx + shadowXOffset, cy))
                             } else {
-                                // Waning: shadow on right side
                                 val shadowFrac = (1.0 - illumination).toFloat()
                                 val shadowXOffset = (1 - shadowFrac * 2) * r
                                 drawCircle(shadowColor, radius = r, center = Offset(cx + shadowXOffset, cy))
@@ -825,8 +883,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                 Spacer(Modifier.height(120.dp))
             }
 
-            // ── Pinned header (on top of widgets) ──────────────────────────
-            // Frosted gradient behind header (only visible when scrolled)
             val headerBlurAlpha = smoothProgress.coerceIn(0f, 1f)
             if (headerBlurAlpha > 0.01f) {
                 Box(modifier = Modifier.fillMaxWidth().height(120.dp)
@@ -842,14 +898,12 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings) {
                 )
             }
 
-            // Pinned title, dash, temp
             Text(text = headerText, color = Color.White.copy(alpha = 0.9f), fontSize = titleSize, fontWeight = titleWeight, modifier = Modifier.offset(x = titleX, y = titleY))
             if (settings.headerType != HeaderType.Disabled) {
                 Text(text = "-", color = Color.White.copy(alpha = dashAlpha), fontSize = 28.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.offset(x = dashX, y = titleY))
             }
             Text(text = "${data.temp ?: "__"}°", color = Color.White.copy(alpha = tempAlpha), fontSize = tempSize, fontWeight = FontWeight.Bold, modifier = Modifier.offset(x = tempX, y = tempY))
 
-            // Pinned "Updated at" row
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.offset(y = updateY).layout { measurable, constraints ->

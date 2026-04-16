@@ -175,7 +175,7 @@ fun SettingsScreen(
                             SettingsItemOverlay("Wind Speed unit", "Kilometers per hour ( Km/h )", Icons.Outlined.Air) {}
                             SettingsItemOverlay("Pressure Unit", "inches of mercury", Icons.Outlined.Compress) {}
                             SettingsItemOverlay("Visibility Unit", "Meters/kilometers", Icons.Outlined.Visibility) {}
-                            SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS. if disabled, the app will use default city.", Icons.Outlined.LocationOn, true) { }
+                            SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS. if disabled, the app will use default city.", Icons.Outlined.LocationOn, settings.locationBasedWeather) { onUpdateSettings(settings.copy(locationBasedWeather = it)) }
                         }
                     }
                 }
@@ -212,6 +212,7 @@ fun SettingsScreen(
                             }
                             SettingsSwitch("Enable Clouds", "Volumetric procedural cloud layer", Icons.Outlined.FilterDrama, settings.enableClouds) { onUpdateSettings(settings.copy(enableClouds = it)) }
                             SettingsSwitch("Rotate Wind Arrow", "Continously rotate the arrow on wind speed", Icons.AutoMirrored.Outlined.RotateRight, settings.debugRotateWindSpeed) { onUpdateSettings(settings.copy(debugRotateWindSpeed = it)) }
+                            SettingsSwitch("Demo Mode", "Force static placeholder data for UI testing", Icons.Outlined.Science, settings.demoMode) { onUpdateSettings(settings.copy(demoMode = it)) }
                         }
                     }
                     
