@@ -3,6 +3,12 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val secretsFile = rootProject.file("secrets.properties")
+val secrets = java.util.Properties()
+if (secretsFile.exists()) {
+    secrets.load(secretsFile.inputStream())
+}
+
 android {
     namespace = "com.app.weather"
     compileSdk = 34
@@ -15,6 +21,12 @@ android {
         versionName = "0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Inject API Keys from secrets.properties
+        buildConfigField("String", "OPENWEATHER_API_KEY", "\"${secrets.getProperty("OPENWEATHER_API_KEY") ?: ""}\"")
+        buildConfigField("String", "BMKG_API_KEY", "\"${secrets.getProperty("BMKG_API_KEY") ?: ""}\"")
+        buildConfigField("String", "OPENMAP_API_KEY", "\"${secrets.getProperty("OPENMAP_API_KEY") ?: ""}\"")
+        buildConfigField("String", "GOOGLE_API_KEY", "\"${secrets.getProperty("GOOGLE_API_KEY") ?: ""}\"")
     }
 
     buildTypes {
@@ -35,6 +47,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.9"

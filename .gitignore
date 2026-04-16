@@ -37,3 +37,6 @@ rust_engine/Cargo.lock
 *~
 *.swp
 *.log
+
+# Secrets
+secrets.properties
