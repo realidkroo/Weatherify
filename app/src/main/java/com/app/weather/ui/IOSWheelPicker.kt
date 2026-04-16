@@ -27,7 +27,7 @@ import kotlin.math.sin
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun IOSWheelPicker(
+fun WheelPicker(
     options: List<String>,
     selectedIndex: Int,
     onIndexSelected: (Int) -> Unit,

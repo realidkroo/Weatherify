@@ -3,10 +3,12 @@ package com.app.weather.ui
 import android.annotation.SuppressLint
 import android.graphics.RuntimeShader
 import android.os.Build
+import androidx.compose.ui.draw.clipToBounds
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.RequiresApi
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import org.intellij.lang.annotations.Language
 import kotlin.math.*
 
@@ -181,7 +184,14 @@ private fun FullWidgetBox(icon: androidx.compose.ui.graphics.vector.ImageVector,
 @SuppressLint("SetJavaScriptEnabled")
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () -> Unit = {}) {
+fun MainWeatherScreen(
+    data: WeatherData, 
+    settings: AppSettings, 
+    onRefresh: () -> Unit = {},
+    testOdometerFrom: Int? = null,
+    testOdometerTarget: Int? = null,
+    testOdometerTrigger: Int = 0
+) {
     val scrollOffset = remember { mutableFloatStateOf(0f) }
     val maxScroll = 6000f
     val density = LocalDensity.current
@@ -225,11 +235,14 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
         snapshotFlow { (scrollOffset.floatValue / 800f).coerceIn(0f, 1f) }
             .collect { target -> 
                 launch { 
-                    smoothProgress.animateTo(
-                        target, 
-                        // 👇 Fast speed (350f) but silky glide stop (0.95f)
-                        spring(dampingRatio = 0.95f, stiffness = 350f)
-                    ) 
+                    if (settings.animation) {
+                        smoothProgress.animateTo(
+                            target, 
+                            spring(dampingRatio = 0.95f, stiffness = 350f)
+                        )
+                    } else {
+                        smoothProgress.snapTo(target)
+                    }
                 } 
             }
     }
@@ -250,12 +263,12 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
     val titleTextWidthPx = remember(headerText) { textMeasurer.measure(text = headerText, style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Bold)).size.width }
     val exactTitleWidthDp = with(density) { titleTextWidthPx.toDp() }
 
-    val skyTopColor by animateColorAsState(getSkyColors(data.type, visualState).first, animationSpec = tween(1500), label = "")
-    val skyBottomColor by animateColorAsState(getSkyColors(data.type, visualState).second, animationSpec = tween(1500), label = "")
-    val cloudColor by animateColorAsState(getCloudColor(data.type, visualState), animationSpec = tween(1500), label = "")
-    val cloudDensityMult by animateFloatAsState(when (data.type) { WeatherType.Clear -> 0.0f; WeatherType.Clouds -> 1.0f; WeatherType.Rain, WeatherType.Drizzle -> 1.2f; WeatherType.Thunderstorm -> 1.5f; WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke, WeatherType.Dust, WeatherType.Sand, WeatherType.Ash -> 1.2f; WeatherType.Snow -> 1.0f; else -> 1.0f }, animationSpec = tween(1500), label = "")
-    val isFogAnim by animateFloatAsState(targetValue = if (data.type in listOf(WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke)) 1f else 0f, animationSpec = tween(1500), label = "")
-    val windSpeedMult by animateFloatAsState(when (data.type) { WeatherType.Thunderstorm -> 2.5f; WeatherType.Rain -> 1.5f; WeatherType.Clear -> 0.5f; else -> 1.0f }, animationSpec = tween(1500), label = "")
+    val skyTopColor by animateColorAsState(getSkyColors(data.type, visualState).first, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    val skyBottomColor by animateColorAsState(getSkyColors(data.type, visualState).second, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    val cloudColor by animateColorAsState(getCloudColor(data.type, visualState), animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    val cloudDensityMult by animateFloatAsState(when (data.type) { WeatherType.Clear -> 0.0f; WeatherType.Clouds -> 1.0f; WeatherType.Rain, WeatherType.Drizzle -> 1.2f; WeatherType.Thunderstorm -> 1.5f; WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke, WeatherType.Dust, WeatherType.Sand, WeatherType.Ash -> 1.2f; WeatherType.Snow -> 1.0f; else -> 1.0f }, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    val isFogAnim by animateFloatAsState(targetValue = if (data.type in listOf(WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke)) 1f else 0f, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    val windSpeedMult by animateFloatAsState(when (data.type) { WeatherType.Thunderstorm -> 2.5f; WeatherType.Rain -> 1.5f; WeatherType.Clear -> 0.5f; else -> 1.0f }, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
 
     val skyShader = remember { RuntimeShader(SKY_SHADER) }
     val cloudBackShader = remember { RuntimeShader(CLOUD_SHADER) }
@@ -266,12 +279,25 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
         while (isActive) { withInfiniteAnimationFrameMillis { frameTime -> time.floatValue = (frameTime % 100_000L) / 1000f } }
     }
 
-    // GlassState wrapper for the background content so the top bar can blur it
+    var displayTemp by remember(data.temp) { mutableStateOf(data.temp) }
+    var forceSnap by remember { mutableStateOf<Int?>(null) }
+    
+    LaunchedEffect(testOdometerTrigger) {
+        if (testOdometerTrigger > 0) {
+            val f = testOdometerFrom ?: -1
+            val t = testOdometerTarget ?: -1
+            forceSnap = f
+            displayTemp = f
+            delay(100)
+            forceSnap = null
+            displayTemp = t
+        }
+    }
+
     val internalGlassState = remember { GlassState() }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
 
-        // ─── LAYER 1: Scrollable Background Content (Captured by GlassState) ───
         Box(modifier = Modifier
             .fillMaxSize()
             .glassRoot(internalGlassState)
@@ -319,7 +345,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                 val loadingRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)), label = "")
 
                 Row(modifier = Modifier.padding(top = 60.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = contentColor, modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (isRefreshing) loadingRotation else -scrollOffset.floatValue * 3f })
+                    Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = contentColor, modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (isRefreshing && settings.animation) loadingRotation else if (isRefreshing) 0f else -scrollOffset.floatValue * 3f })
                     Text(text = refreshText, color = contentColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
@@ -345,7 +371,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                     "$mainEvent It's ${data.description} right now in ${data.location}, visibility is ${data.visibility}. The temperature feels like ${data.feelsLike ?: "__"}°C ($feelScenario). Rain probability: ${data.rainProb}."
                 }
 
-                // TEXT BLOCK: Retains DECAL blur artifact fix & padding bleed area
                 Column(modifier = Modifier
                     .fillMaxWidth()
                     .graphicsLayer {
@@ -363,7 +388,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         }
                     }
                     .padding(horizontal = 32.dp)
-                    .padding(bottom = 32.dp) // padding for unbounded blur bleed
+                    .padding(bottom = 32.dp) 
                 ) {
                     Spacer(modifier = Modifier.height(24.dp))
                     Text(text = dynamicQuote, color = contentColor.copy(alpha = 0.8f), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.fillMaxWidth())
@@ -375,7 +400,7 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                         val metrics = listOf(Pair(Icons.Default.FilterDrama, data.aqi), Pair(Icons.Default.NorthEast, data.wind), Pair(Icons.Default.Visibility, data.visibility), Pair(Icons.Default.WaterDrop, data.humidity))
                         metrics.forEach { (icon, label) ->
                             Row(modifier = Modifier.wrapContentWidth().clip(RoundedCornerShape(percent = 50)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = windRotation })
+                                Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = if (settings.animation) windRotation else 0f })
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
@@ -619,7 +644,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
             }
         }
 
-        // ─── LAYER 2: 3-Step Frosted Glass Overlay for Header (Fades in on scroll) ───
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -641,8 +665,6 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
                 )
             ))
         }
-
-        // ─── LAYER 3: Sharp Header Texts (Sits securely on top of the blur) ───
 
         Text(
             text = headerText, color = contentColor.copy(alpha = 0.9f), fontSize = 28.sp, fontWeight = FontWeight.Bold,
@@ -666,14 +688,20 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
             })
         }
 
-        Text(
-            text = "${data.temp ?: "__"}°", color = contentColor, fontSize = 130.sp, fontWeight = FontWeight.Bold,
+        // ───  MATHEMATICAL ODOMETER ──────────────────────────────────────────────
+        AnimatedOdometerText(
+            temp = displayTemp,
+            snapTo = forceSnap,
+            color = contentColor,
+            style = TextStyle(fontSize = 130.sp, fontWeight = FontWeight.Bold, color = contentColor),
+            animationEnabled = settings.animation,
             modifier = Modifier.graphicsLayer {
                 val prog = smoothProgress.value
                 val scale = (130f - 102f * prog) / 130f
                 scaleX = scale; scaleY = scale
                 transformOrigin = TransformOrigin(0f, 0f)
                 alpha = (1f - 0.3f * prog).coerceIn(0f, 1f)
+                
                 val exactTitlePx = exactTitleWidthDp.toPx()
                 val targetDockedX = 32.dp.toPx() + exactTitlePx + 22.dp.toPx()
                 translationX = 32.dp.toPx() + (targetDockedX - 32.dp.toPx()) * prog
@@ -698,6 +726,105 @@ fun MainWeatherScreen(data: WeatherData, settings: AppSettings, onRefresh: () ->
         }
     }
 }
+
+// ───  ODOMETER COMPONENT ───────────────────────────────────────────────────
+
+@Composable
+fun AnimatedOdometerText(
+    temp: Int?,
+    color: Color,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    snapTo: Int? = null,
+    animationEnabled: Boolean = true
+) {
+    val targetVal = temp?.toFloat() ?: -1f
+    val anim = remember { Animatable(snapTo?.toFloat() ?: targetVal) }
+
+    LaunchedEffect(snapTo) {
+        snapTo?.let { anim.snapTo(it.toFloat()) }
+    }
+
+    LaunchedEffect(targetVal, snapTo) {
+        if (snapTo == null && anim.targetValue != targetVal) {
+            if (animationEnabled) {
+                anim.animateTo(targetVal, spring(dampingRatio = 0.95f, stiffness = 50f))
+            } else {
+                anim.snapTo(targetVal)
+            }
+        }
+    }
+
+    val textMeasurer = rememberTextMeasurer()
+    val heightPx = remember(style) { textMeasurer.measure("0", style).size.height.toFloat() }
+
+    Row(
+        modifier = modifier, 
+        verticalAlignment = Alignment.Top, 
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Box(
+            modifier = Modifier.layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val currentValue = anim.value
+                val w = if (currentValue < 0) {
+                    textMeasurer.measure("__", style).size.width.toFloat()
+                } else {
+                    val floorVal = floor(currentValue).toInt()
+                    val ceilVal = ceil(currentValue).toInt()
+                    val fraction = currentValue - floorVal
+                    val w1 = textMeasurer.measure(floorVal.toString(), style).size.width.toFloat()
+                    val w2 = textMeasurer.measure(ceilVal.toString(), style).size.width.toFloat()
+                    w1 + (w2 - w1) * fraction
+                }
+                // Explicitly report our exact interpolated width so the box never collapses!
+                layout(w.roundToInt(), placeable.height) {
+                    placeable.place(0, 0)
+                }
+            },
+            contentAlignment = Alignment.CenterStart
+        ) {
+            // Invisible structural placeholder to ensure placeable.height isn't zero
+            Text("0", style = style, color = Color.Transparent)
+
+            val currentValue = anim.value
+            val minIdx = (floor(currentValue) - 2).toInt()
+            val maxIdx = (ceil(currentValue) + 2).toInt()
+
+            for (i in minIdx..maxIdx) {
+                val text = if (i == -1) "__" else if (i < -1) "" else i.toString()
+                if (text.isNotEmpty()) {
+                    val offset = (i - currentValue) * heightPx
+                    val absOffset = abs(i - currentValue)
+                    
+                    val itemAlpha = (1f - absOffset).coerceIn(0f, 1f)
+                    val itemBlur = (absOffset * 20f).coerceIn(0f, 20f)
+
+                    Text(
+                        text = text,
+                        style = style,
+                        modifier = Modifier.graphicsLayer {
+                            translationY = offset
+                            alpha = itemAlpha
+                            
+                            if (itemBlur > 0.1f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                    itemBlur, itemBlur, android.graphics.Shader.TileMode.DECAL
+                                ).asComposeRenderEffect()
+                            } else {
+                                renderEffect = null
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        
+        Text("°", style = style)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 private fun getSkyColors(weather: WeatherType, state: VisualState): Pair<Color, Color> {
     return when (state) {

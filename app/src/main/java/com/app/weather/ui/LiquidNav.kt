@@ -4,6 +4,7 @@ import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import androidx.compose.foundation.background
@@ -59,7 +60,12 @@ class SpringFloat(initial: Float) {
     var velocity: Float = 0f
     var target:   Float = initial
 
-    fun step(dt: Float, stiffness: Float = 280f, damping: Float = 22f) {
+    fun step(dt: Float, stiffness: Float = 280f, damping: Float = 22f, animationEnabled: Boolean = true) {
+        if (!animationEnabled) {
+            value = target
+            velocity = 0f
+            return
+        }
         val force = (target - value) * stiffness
         velocity  = (velocity + force * dt) * (1f - damping * dt).coerceAtLeast(0f)
         value    += velocity * dt
@@ -79,6 +85,7 @@ fun LiquidGlassNavBar(
 ) {
     val density = LocalDensity.current
     val view    = LocalView.current
+    val settings = LocalAppSettings.current
 
     val pillX = remember { SpringFloat(0f) }
     val pillW = remember { SpringFloat(200f) }
@@ -148,13 +155,13 @@ fun LiquidGlassNavBar(
                     barSX.target = 1f; barSY.target = 1f
                 }
 
-                pillX.step(dt, stiffness = 340f, damping = 24f)
-                pillW.step(dt, stiffness = 340f, damping = 24f)
-                barSX.step(dt, stiffness = 100f, damping = 10f)
-                barSY.step(dt, stiffness = 100f, damping = 10f)
+                pillX.step(dt, stiffness = 340f, damping = 24f, animationEnabled = settings.animation)
+                pillW.step(dt, stiffness = 340f, damping = 24f, animationEnabled = settings.animation)
+                barSX.step(dt, stiffness = 100f, damping = 10f, animationEnabled = settings.animation)
+                barSY.step(dt, stiffness = 100f, damping = 10f, animationEnabled = settings.animation)
 
                 for (i in 0..2) {
-                    iconS[i].step(dt, stiffness = 380f, damping = 20f)
+                    iconS[i].step(dt, stiffness = 380f, damping = 20f, animationEnabled = settings.animation)
                     iconSt[i] = iconS[i].value
                 }
 
@@ -176,8 +183,12 @@ fun LiquidGlassNavBar(
     
     val blurAnim = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(weatherType) {
-        blurAnim.animateTo(10f, animationSpec = tween(150))
-        blurAnim.animateTo(0f,  animationSpec = tween(150))
+        if (settings.animation) {
+            blurAnim.animateTo(10f, animationSpec = tween(150))
+            blurAnim.animateTo(0f,  animationSpec = tween(150))
+        } else {
+            blurAnim.snapTo(0f)
+        }
     }
 
     val outsetPx    = with(density) { 0.dp.toPx() } 
@@ -260,8 +271,8 @@ fun LiquidGlassNavBar(
                     onClick = { hapticTick(view); onNavigate(Destination.Weather); iconS[0].impulse(8f) },
                     onHoverChange = { h -> iconS[0].target = if (h) 1.2f else 1f }
                 ) {
-                    Crossfade(targetState = weatherIcon, animationSpec = tween(300), label = "") { icon ->
-                        Icon(imageVector = icon, contentDescription = "Weather", tint = Color.White, modifier = Modifier.size(24.dp).blur(blurAnim.value.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded))
+                    Crossfade(targetState = weatherIcon, animationSpec = if (settings.animation) tween(300) else snap(), label = "") { icon ->
+                        Icon(imageVector = icon, contentDescription = "Weather", tint = Color.White, modifier = Modifier.size(24.dp).blur(if (settings.blur) blurAnim.value.dp else 0.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded))
                     }
                 }
 

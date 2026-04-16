@@ -14,11 +14,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,12 +57,75 @@ fun DebugMenuScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        Text("Scrolling Animation Test", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ── Odometer Test Tool ────────────────────────────────────────────
+        var testFrom by remember { mutableIntStateOf(-1) }
+        var testTarget by remember { mutableIntStateOf(24) }
+        var activeSnap by remember { mutableStateOf<Int?>(null) }
+        var activeAnimate by remember { mutableStateOf(24) }
+
+        // When "From" changes, immediately snap the odometer
+        LaunchedEffect(testFrom) {
+            activeSnap = testFrom
+            activeAnimate = testFrom
+        }
+        
+        // When "Target" changes, let it fly!
+        LaunchedEffect(testTarget) {
+            activeSnap = null
+            activeAnimate = testTarget
+        }
+
+        val numberOptions = remember { listOf("__") + (0..99).map { it.toString() } }
+
+        Box(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White.copy(0.05f)).padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // The animated Odometer
+                AnimatedOdometerText(
+                    temp = if (activeAnimate == -1) null else activeAnimate,
+                    snapTo = activeSnap?.let { if (it == -1) -1 else it },
+                    color = Color.White,
+                    style = TextStyle(fontSize = 72.sp, fontWeight = FontWeight.Bold, color = Color.White),
+                    animationEnabled = true
+                )
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // The Two Controllers
+                Row(modifier = Modifier.fillMaxWidth().height(150.dp)) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("FROM", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        WheelPicker(
+                            options = numberOptions,
+                            selectedIndex = testFrom + 1,
+                            onIndexSelected = { testFrom = it - 1 }
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("TARGET", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        WheelPicker(
+                            options = numberOptions,
+                            selectedIndex = testTarget + 1,
+                            onIndexSelected = { testTarget = it - 1 }
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         // ── Visual Effects Toggles ────────────────────────────────────────────
         Text("Visual Effects", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Enable Clouds toggle
         Row(
             modifier = Modifier
                 .fillMaxWidth()

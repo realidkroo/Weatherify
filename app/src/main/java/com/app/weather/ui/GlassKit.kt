@@ -58,6 +58,7 @@ fun GlassPillBackground(
     shape: Shape? = null,
     modifier: Modifier = Modifier
 ) {
+    val settings = LocalAppSettings.current
     var position by remember { mutableStateOf(Offset.Zero) }
 
     androidx.compose.foundation.Canvas(
@@ -65,7 +66,7 @@ fun GlassPillBackground(
             .onGloballyPositioned { position = it.positionInWindow() }
             .then(if (shape != null) Modifier.clip(shape) else Modifier)
             .graphicsLayer {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0f) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0f && settings.blur) {
                     renderEffect = android.graphics.RenderEffect
                         .createBlurEffect(blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP)
                         .asComposeRenderEffect()
