@@ -253,29 +253,31 @@ fun WeatherAppRoot() {
     }
 
     LaunchedEffect(activeOverlay, activeNestedOverlay) {
+        val smoothSpring = spring<Float>(dampingRatio = 0.82f, stiffness = 220f)
+        
         when {
             activeNestedOverlay != NestedOverlay.None -> stackedOverlayProgress.animateTo(
                 1f,
-                spring(dampingRatio = 0.95f, stiffness = 350f)
+                smoothSpring
             )
 
             activeOverlay != OverlayType.None -> {
                 if (stackedOverlayProgress.value > 0f) stackedOverlayProgress.animateTo(
                     0f,
-                    spring(dampingRatio = 0.95f, stiffness = 350f)
+                    smoothSpring
                 )
                 displayedOverlay = activeOverlay
-                overlayProgress.animateTo(1f, spring(dampingRatio = 0.95f, stiffness = 350f))
+                overlayProgress.animateTo(1f, smoothSpring)
             }
 
             else -> {
                 launch {
                     stackedOverlayProgress.animateTo(
                         0f,
-                        spring(dampingRatio = 0.95f, stiffness = 350f)
+                        smoothSpring
                     )
                 }
-                overlayProgress.animateTo(0f, spring(dampingRatio = 0.95f, stiffness = 350f))
+                overlayProgress.animateTo(0f, smoothSpring)
                 displayedOverlay = OverlayType.None
             }
         }
@@ -341,11 +343,14 @@ fun WeatherAppRoot() {
                             scaleY = scale
 
                             clip = true
-                            shape = RoundedCornerShape((32f * oProg + 16f * sProg).dp.toPx())
+                            // 1. SAFEGUARD: Coerce shape radius to be at least 0f to prevent crash
+                            val safeRadius = (32f * oProg + 16f * sProg).coerceAtLeast(0f)
+                            shape = RoundedCornerShape(safeRadius.dp.toPx())
 
                             if (settings.blur) {
                                 val blurPx = (12f * oProg + 8f * sProg).dp.toPx()
-                                if (blurPx > 0f) {
+                                // 2. SAFEGUARD: Ensure blur radius is strictly positive
+                                if (blurPx > 0.1f) {
                                     renderEffect = android.graphics.RenderEffect.createBlurEffect(
                                         blurPx,
                                         blurPx,
@@ -510,7 +515,8 @@ fun WeatherAppRoot() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer { alpha = stackedOverlayProgress.value }
+                            // 3. SAFEGUARD: Coerce alpha values directly
+                            .graphicsLayer { alpha = stackedOverlayProgress.value.coerceIn(0f, 1f) }
                             .background(Color.Black.copy(alpha = 0.5f))
                     )
                 }
@@ -519,7 +525,8 @@ fun WeatherAppRoot() {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .graphicsLayer { alpha = overlayProgress.value }
+                            // 4. SAFEGUARD: Coerce alpha values directly
+                            .graphicsLayer { alpha = overlayProgress.value.coerceIn(0f, 1f) }
                             .background(Color.Black.copy(alpha = 0.7f))
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -535,11 +542,12 @@ fun WeatherAppRoot() {
                             }
                             .graphicsLayer {
                                 val oProg = overlayProgress.value
-                                val sProg = stackedOverlayProgress.value
+                                val sProg = stackedOverlayProgress.value.coerceIn(0f, 1f)
+                                // 5. SAFEGUARD: Apply safeguards to container scales and alphas
                                 scaleX = 1f - 0.06f * sProg
                                 scaleY = 1f - 0.06f * sProg
                                 translationY = (1f - oProg) * primaryOverlayHeightPx
-                                alpha = 1f - 0.6f * sProg
+                                alpha = (1f - 0.6f * sProg).coerceIn(0f, 1f)
                             }
                             .pointerInput(Unit) {
                                 detectVerticalDragGestures(
@@ -547,7 +555,7 @@ fun WeatherAppRoot() {
                                         if (overlayProgress.value < 0.8f) handleBack() else coroutineScope.launch {
                                             overlayProgress.animateTo(
                                                 1f,
-                                                spring(dampingRatio = 0.95f, stiffness = 350f)
+                                                spring(dampingRatio = 0.82f, stiffness = 220f)
                                             )
                                         }
                                     },
@@ -600,7 +608,7 @@ fun WeatherAppRoot() {
                             }
                             .graphicsLayer {
                                 translationY =
-                                    (1f - stackedOverlayProgress.value) * secondaryOverlayHeightPx
+                                    (1f - stackedOverlayProgress.value.coerceIn(0f, 1f)) * secondaryOverlayHeightPx
                             }
                             .pointerInput(Unit) {
                                 detectVerticalDragGestures(
@@ -609,7 +617,7 @@ fun WeatherAppRoot() {
                                             NestedOverlay.None else coroutineScope.launch {
                                             stackedOverlayProgress.animateTo(
                                                 1f,
-                                                spring(dampingRatio = 0.95f, stiffness = 350f)
+                                                spring(dampingRatio = 0.82f, stiffness = 220f)
                                             )
                                         }
                                     },

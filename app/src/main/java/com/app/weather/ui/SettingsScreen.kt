@@ -244,7 +244,6 @@ fun SettingsScreen(
         LazyColumn(
             state = state,
             modifier = modifier.fillMaxSize(),
-            // FIX: slightly more top padding so content sits comfortably below the expanded header
             contentPadding = PaddingValues(top = if (isMain) 168.dp else 252.dp, bottom = 120.dp, start = 24.dp, end = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
             userScrollEnabled = scrollable
@@ -280,7 +279,7 @@ fun SettingsScreen(
                             SettingsItemOverlay("Notifications", "notification settings", Icons.Outlined.Notifications) {}
                             SettingsItemOverlay("Widgets", "widgets settings", Icons.Outlined.Widgets) {}
                             SettingsItemOverlay("Provider selector", "OpenWeather, BMKG, or Google", Icons.Outlined.CloudQueue) { onOpenOverlay(OverlayType.Provider) }
-                            SettingsItemOverlay("Set your own API Keys", "if you prefer to not use our own api keys", Icons.Outlined.VpnKey) {}
+                            SettingsItemOverlay("Set your own API Keys", "if you prefer to not use our api keys", Icons.Outlined.VpnKey) {}
                             SettingsItemOverlay("Debug Menus", "well.. debug menus", Icons.Outlined.BugReport) { navType = SubNavType.Push; onMenuChange("DebugMenu") }
                             SettingsItemOverlay("Language", "english", Icons.Outlined.Translate) {}
                             SettingsItemOverlay("Credits", "made by roo, with <3", Icons.Outlined.Info) { onOpenOverlay(OverlayType.Credits) }
@@ -295,7 +294,7 @@ fun SettingsScreen(
                             SettingsItemOverlay("Pressure Unit", "inches of mercury", Icons.Outlined.Compress) {}
                             SettingsItemOverlay("Visibility Unit", "Meters/kilometers", Icons.Outlined.Visibility) {}
                             SettingsItemOverlay("Refresh cycle", "${settings.refreshIntervalSec / 60}m ${settings.refreshIntervalSec % 60}s", Icons.AutoMirrored.Outlined.RotateRight) { onOpenOverlay(OverlayType.RefreshCycle) }
-                            SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS. if disabled, the app will use default city.", Icons.Outlined.LocationOn, settings.locationBasedWeather) { onUpdateSettings(settings.copy(locationBasedWeather = it)) }
+                            SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS.", Icons.Outlined.LocationOn, settings.locationBasedWeather) { onUpdateSettings(settings.copy(locationBasedWeather = it)) }
                             if (settings.locationBasedWeather) {
                                 SettingsSwitch("Precise Location", "Use high-accuracy GPS. may consume more battery.", Icons.Outlined.MyLocation, settings.preciseLocation) { onUpdateSettings(settings.copy(preciseLocation = it)) }
                             }
@@ -310,7 +309,7 @@ fun SettingsScreen(
                             SettingsItemOverlay("Customize Front page", "Quote for the front page", Icons.Outlined.Dashboard) { onOpenOverlay(OverlayType.Header) }
                             SettingsItemOverlay("Icons", "select icons that will be used for the app", Icons.Outlined.AppShortcut) { onOpenOverlay(OverlayType.Icons) }
                             SettingsItemOverlay("Customize Weather Widget", "Widget for the front page", Icons.Outlined.Widgets) {}
-                            SettingsSwitch("Monet Engine", "dynamic color based on your wallpaper (Android 12+)", Icons.Outlined.Palette, settings.monet) { onUpdateSettings(settings.copy(monet = it)) }
+                            SettingsSwitch("Monet Engine", "dynamic color based on your wallpaper", Icons.Outlined.Palette, settings.monet) { onUpdateSettings(settings.copy(monet = it)) }
                             SettingsSwitch("Haptics", "haptics for the app", Icons.Outlined.Vibration, settings.haptics) { onUpdateSettings(settings.copy(haptics = it)) }
                             SettingsSwitch("Blur", "wide blur effects across the app", Icons.Outlined.BlurOn, settings.blur) { onUpdateSettings(settings.copy(blur = it)) }
                             SettingsSwitch("Animation", "animation across the app", Icons.Outlined.Animation, settings.animation) { onUpdateSettings(settings.copy(animation = it)) }
@@ -361,20 +360,11 @@ fun SettingsScreen(
 
     val physicsProgress by animateFloatAsState(
         targetValue = headerProgress,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 200f), label = "liquid"
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 220f), label = "liquid"
     )
 
     val titleScale = 1f - 0.4f * physicsProgress
     val titleX = (if (isMain) 0f else 88f * physicsProgress).dp
-
-    // Pill alignment:
-    //   collapsed header = 120dp, status bar pad = 64dp → usable = 56dp
-    //   pill height = 42dp → pill top-edge = (56-42)/2 = 7dp from padded top
-    //   pill vertical center = 7 + 21 = 28dp from padded top
-    //   title fontSize=40sp at scale=0.6 → visual height ≈ 24dp
-    //   to vertically center text inside pill: y = 28 - 24/2 = 16dp  (TransformOrigin top-left)
-    //   but since scale anchors at top-left we want titleY = pill_top = 7dp  → text top lands at 7dp, scaled height fits
-    //   empirically 4dp looks best when scrolled (text needs to sit a bit higher)
     val titleY = (
             if (isMain) {
                 (56f * (1f - physicsProgress) + 4f * physicsProgress)
@@ -383,16 +373,9 @@ fun SettingsScreen(
             }
             ).dp
 
-    // Floating icon: starts at 56dp below padded top, slides right to 48dp when scrolled
     val iconX = (48f * physicsProgress).dp
     val iconY = (56f * (1f - physicsProgress)).dp
-    // 0.7x bigger at unscrolled: 2.7 → 1.0 when scrolled
     val iconScale = 2.7f - 1.7f * physicsProgress
-
-    // Arrow box is 36dp at (0,0) of padded box → its center = (18dp, 18dp)
-    // Icon  box is 36dp at (iconX, iconY)       → its center = (iconX+18dp, iconY+18dp)
-    // We pass these centers directly into the Canvas (no canvas offset trick needed)
-    // Canvas is full-size so coordinates are in padded-box space directly.
 
     val metaballModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         Modifier.graphicsLayer {
@@ -430,7 +413,7 @@ fun SettingsScreen(
 
                 val bgPhysicsProgress by animateFloatAsState(
                     targetValue = bgHeaderProgress,
-                    animationSpec = spring(dampingRatio = 0.7f, stiffness = 200f), label = "bg_liquid"
+                    animationSpec = spring(dampingRatio = 0.82f, stiffness = 220f), label = "bg_liquid"
                 )
 
                 val bgExpandedHeight = if (bgIsMain) 160f else 240f
@@ -439,7 +422,6 @@ fun SettingsScreen(
 
                 val bgTitleScale = 1f - 0.4f * bgPhysicsProgress
                 val bgTitleX = (if (bgIsMain) 0f else 88f * bgPhysicsProgress).dp
-                // FIX: same pill-alignment math for bg header
                 val bgTitleY = (
                         if (bgIsMain) {
                             (56f * (1f - bgPhysicsProgress) + 7f * bgPhysicsProgress)
@@ -450,13 +432,14 @@ fun SettingsScreen(
 
                 val bgIconX = (48f * bgPhysicsProgress).dp
                 val bgIconY = (56f * (1f - bgPhysicsProgress) + 0f * bgPhysicsProgress).dp
-                // FIX: 0.7x bigger at unscrolled for bg too
                 val bgIconScale = 2.7f - 1.7f * bgPhysicsProgress
 
                 Box(modifier = Modifier.fillMaxWidth().height(bgCurrentHeight.dp)) {
                     Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
-                        if (settings.blur) {
-                            Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f)) {
+                        // Apply dynamically fading blur alpha
+                        val bgBlurAlpha = bgPhysicsProgress.coerceIn(0f, 1f)
+                        if (settings.blur && bgBlurAlpha > 0.01f) {
+                            Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = bgBlurAlpha)) {
                                 Column(modifier = Modifier.fillMaxSize()) {
                                     GlassPillBackground(state = internalBgGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((bgCurrentHeight * 0.3f).dp))
                                     GlassPillBackground(state = internalBgGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((bgCurrentHeight * 0.35f).dp))
@@ -479,7 +462,6 @@ fun SettingsScreen(
                             "General" -> Icons.Outlined.Settings; "Appearance" -> Icons.Outlined.Palette; "DebugMenu" -> Icons.Outlined.BugReport; else -> null
                         }
 
-                        // BG: metaball blob — Canvas fills padded box, direct coordinate math
                         androidx.compose.animation.AnimatedVisibility(
                             visible = swipeBgMenu != "Main",
                             enter = fadeIn() + scaleIn(initialScale = 0.8f),
@@ -517,7 +499,6 @@ fun SettingsScreen(
                             }
                         }
 
-                        // BG: Separator line
                         androidx.compose.animation.AnimatedVisibility(
                             visible = swipeBgMenu != "Main",
                             enter = fadeIn(),
@@ -537,7 +518,6 @@ fun SettingsScreen(
                             )
                         }
 
-                        // BG: Floating menu icon
                         if (bgMenuIcon != null) {
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = swipeBgMenu != "Main",
@@ -559,7 +539,6 @@ fun SettingsScreen(
                             }
                         }
 
-                        // BG: Back arrow — fixed at (0,0), visual only (no click needed on bg layer)
                         androidx.compose.animation.AnimatedVisibility(
                             visible = swipeBgMenu != "Main",
                             enter = fadeIn() + scaleIn(initialScale = 0.8f),
@@ -620,14 +599,14 @@ fun SettingsScreen(
                             if (isEdgeSwipe) {
                                 coroutineScope.launch {
                                     if (dragAccumulator > 150f) {
-                                        swipeOffset.animateTo(screenWidthPx, tween(200, easing = LinearEasing))
+                                        swipeOffset.animateTo(screenWidthPx, tween(250, easing = LinearEasing))
                                         navType = SubNavType.Instant
                                         onMenuChange("Main")
                                         delay(32)
                                         swipeOffset.snapTo(0f)
                                         swipeBgMenu = null
                                     } else {
-                                        swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                        swipeOffset.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 250f))
                                         swipeBgMenu = null
                                     }
                                 }
@@ -635,7 +614,7 @@ fun SettingsScreen(
                         },
                         onDragCancel = {
                             coroutineScope.launch {
-                                swipeOffset.animateTo(0f, spring(stiffness = 300f))
+                                swipeOffset.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 250f))
                                 swipeBgMenu = null
                             }
                         }
@@ -648,11 +627,15 @@ fun SettingsScreen(
                     label       = "SettingsMenuBase",
                     modifier    = Modifier.fillMaxSize(),
                     transitionSpec = {
+                        val slideCurve = spring<IntOffset>(dampingRatio = 0.82f, stiffness = 220f)
+                        val fadeCurve = tween<Float>(durationMillis = 350)
+                        val scaleCurve = spring<Float>(dampingRatio = 0.82f, stiffness = 220f)
+
                         when (navType) {
-                            SubNavType.Push -> (slideInHorizontally(spring(dampingRatio = 0.95f, stiffness = 350f)) { it } + fadeIn(tween(250))) togetherWith
-                                    (slideOutHorizontally(spring(dampingRatio = 0.95f, stiffness = 350f)) { -it / 3 } + fadeOut(tween(250)))
-                            SubNavType.Pop  -> (slideInHorizontally(spring(dampingRatio = 0.95f, stiffness = 350f)) { -it / 3 } + fadeIn(tween(250))) togetherWith
-                                    (slideOutHorizontally(spring(dampingRatio = 0.95f, stiffness = 350f)) { it } + fadeOut(tween(250)))
+                            SubNavType.Push -> (slideInVertically(slideCurve) { it } + fadeIn(fadeCurve)) togetherWith
+                                    (scaleOut(targetScale = 0.94f, animationSpec = scaleCurve) + fadeOut(fadeCurve))
+                            SubNavType.Pop  -> (scaleIn(initialScale = 0.94f, animationSpec = scaleCurve) + fadeIn(fadeCurve)) togetherWith
+                                    (slideOutVertically(slideCurve) { it } + fadeOut(fadeCurve))
                             SubNavType.Instant -> EnterTransition.None togetherWith ExitTransition.None
                         }
                     }
@@ -668,8 +651,10 @@ fun SettingsScreen(
 
             Box(modifier = Modifier.fillMaxWidth().height(currentHeight.dp)) {
                 Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
-                    if (settings.blur) {
-                        Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f)) {
+                    // Apply dynamically fading blur alpha to foreground
+                    val blurAlpha = physicsProgress.coerceIn(0f, 1f)
+                    if (settings.blur && blurAlpha > 0.01f) {
+                        Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = blurAlpha)) {
                             Column(modifier = Modifier.fillMaxSize()) {
                                 GlassPillBackground(state = internalGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((currentHeight * 0.3f).dp))
                                 GlassPillBackground(state = internalGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((currentHeight * 0.35f).dp))
@@ -692,11 +677,6 @@ fun SettingsScreen(
                         "General" -> Icons.Outlined.Settings; "Appearance" -> Icons.Outlined.Palette; "DebugMenu" -> Icons.Outlined.BugReport; else -> null
                     }
 
-                    // ── Metaball blob layer ───────────────────────────────────────────────
-                    // Canvas fills the entire padded Box so all draw coordinates are in
-                    // padded-box space — no offset tricks, no wrapContentSize shifting.
-                    // Arrow box is 36dp at (0,0)       → center = (18dp, 18dp)
-                    // Icon  box is 36dp at (iconX,iconY) → center = (iconX+18dp, iconY+18dp)
                     androidx.compose.animation.AnimatedVisibility(
                         visible = currentMenu != "Main",
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
@@ -710,16 +690,14 @@ fun SettingsScreen(
                                 .graphicsLayer { alpha = 0.15f }
                                 .then(metaballModifier)
                         ) {
-                            val halfBox = 18.dp.toPx()   // center offset of a 36dp box
+                            val halfBox = 18.dp.toPx()   
                             val radius  = 18.dp.toPx()
 
-                            // Back-arrow circle: always at (18dp, 18dp) padded-box coords
                             val backCX = halfBox
                             val backCY = halfBox
                             drawCircle(color = blobColor, radius = radius, center = Offset(backCX, backCY))
 
                             if (menuIcon != null) {
-                                // Floating-icon circle: moves with iconX / iconY
                                 val icCX = iconX.toPx() + halfBox
                                 val icCY = iconY.toPx() + halfBox
                                 val dynamicRadius = radius * physicsProgress.coerceIn(0f, 1f)
@@ -738,7 +716,6 @@ fun SettingsScreen(
                         }
                     }
 
-                    // ── Separator line (fades in when scrolled) ───────────────────────────
                     androidx.compose.animation.AnimatedVisibility(
                         visible = currentMenu != "Main",
                         enter = fadeIn(),
@@ -748,7 +725,6 @@ fun SettingsScreen(
                         Box(
                             modifier = Modifier
                                 .graphicsLayer {
-                                    // sits just to the right of the 36dp arrow box, vertically centred
                                     translationX = 40.dp.toPx()
                                     translationY = 10.dp.toPx()
                                     alpha = ((physicsProgress - 0.7f) * 3.33f).coerceIn(0f, 1f)
@@ -759,7 +735,6 @@ fun SettingsScreen(
                         )
                     }
 
-                    // ── Floating menu icon (animates to pill position when scrolled) ──────
                     if (menuIcon != null) {
                         androidx.compose.animation.AnimatedVisibility(
                             visible = currentMenu != "Main",
@@ -788,7 +763,6 @@ fun SettingsScreen(
                         }
                     }
 
-                    // ── Back arrow — completely fixed at (0,0), never moves ───────────────
                     androidx.compose.animation.AnimatedVisibility(
                         visible = currentMenu != "Main",
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
@@ -811,7 +785,6 @@ fun SettingsScreen(
                         }
                     }
 
-                    // ── Title ─────────────────────────────────────────────────────────────
                     key(navType) {
                         AnimatedContent(
                             targetState = displayedTitle,
