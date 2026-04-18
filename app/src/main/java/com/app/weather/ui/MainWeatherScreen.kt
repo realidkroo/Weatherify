@@ -266,15 +266,23 @@ fun MainWeatherScreen(
             }
     }
 
+    // Fixed time buckets for a more accurate day/night cycle
     val visualState = if (settings.visualStateOverride != VisualState.Automatic) settings.visualStateOverride else {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        when (hour) { in 5..6 -> VisualState.Sunrise; in 7..11 -> VisualState.Day; in 12..16 -> VisualState.Afternoon; in 17..18 -> VisualState.Sunset; in 19..21 -> VisualState.Evening; else -> VisualState.Night }
+        when (hour) { 
+            in 5..6 -> VisualState.Sunrise
+            in 7..15 -> VisualState.Day 
+            in 16..17 -> VisualState.Afternoon
+            18 -> VisualState.Sunset // Ensure 6 PM translates correctly to Sunset/Dusk
+            in 19..20 -> VisualState.Evening 
+            else -> VisualState.Night 
+        }
     }
 
-    val isBrightBg = (visualState == VisualState.Day || visualState == VisualState.Afternoon) && (data.type == WeatherType.Clear || data.type == WeatherType.Clouds)
-    val contentColor = if (isBrightBg) Color.Black else Color.White
+    // Force all text to remain white for realism and readability against atmospheric skies
+    val contentColor = Color.White
     val secondaryContentColor = contentColor.copy(alpha = 0.7f)
-    val widgetBg = if (isBrightBg) Color.White.copy(alpha = 0.5f) else Color(0xFF121212).copy(alpha = 0.6f)
+    val widgetBg = Color.White.copy(alpha = 0.12f) // Universal translucent glass
 
     val headerText = when (settings.headerType) { HeaderType.Greeting -> data.type.title; HeaderType.Standard -> data.location; HeaderType.Sunrise -> if (data.sunriseEpoch != null) "Sunrise at ${epochToTimeStr(data.sunriseEpoch)}" else "Sunrise --"; HeaderType.FeelsLike -> "Feels like ${data.feelsLike ?: "__"}°"; HeaderType.Disabled -> "" }
 
@@ -285,6 +293,7 @@ fun MainWeatherScreen(
     val skyTopColor by animateColorAsState(getSkyColors(data.type, visualState).first, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
     val skyBottomColor by animateColorAsState(getSkyColors(data.type, visualState).second, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
     val cloudColor by animateColorAsState(getCloudColor(data.type, visualState), animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
+    
     val cloudDensityMult by animateFloatAsState(when (data.type) { WeatherType.Clear -> 0.0f; WeatherType.Clouds -> 1.0f; WeatherType.Rain, WeatherType.Drizzle -> 1.2f; WeatherType.Thunderstorm -> 1.5f; WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke, WeatherType.Dust, WeatherType.Sand, WeatherType.Ash -> 1.2f; WeatherType.Snow -> 1.0f; else -> 1.0f }, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
     val isFogAnim by animateFloatAsState(targetValue = if (data.type in listOf(WeatherType.Mist, WeatherType.Fog, WeatherType.Haze, WeatherType.Smoke)) 1f else 0f, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
     val windSpeedMult by animateFloatAsState(when (data.type) { WeatherType.Thunderstorm -> 2.5f; WeatherType.Rain -> 1.5f; WeatherType.Clear -> 0.5f; else -> 1.0f }, animationSpec = if (settings.animation) tween(1500) else snap(), label = "")
@@ -418,7 +427,7 @@ fun MainWeatherScreen(
                         val windRotation by infiniteTransition.animateFloat(initialValue = 0f, targetValue = 360f, animationSpec = infiniteRepeatable(animation = tween(2000, easing = LinearEasing), repeatMode = RepeatMode.Restart), label = "")
                         val metrics = listOf(Pair(Icons.Default.FilterDrama, data.aqi), Pair(Icons.Default.NorthEast, data.wind), Pair(Icons.Default.Visibility, data.visibility), Pair(Icons.Default.WaterDrop, data.humidity))
                         metrics.forEach { (icon, label) ->
-                            Row(modifier = Modifier.wrapContentWidth().clip(RoundedCornerShape(percent = 50)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(modifier = Modifier.wrapContentWidth().clip(RoundedCornerShape(percent = 50)).background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(imageVector = icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp).graphicsLayer { if (settings.debugRotateWindSpeed && icon == Icons.Default.NorthEast) rotationZ = if (settings.animation) windRotation else 0f })
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(text = label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -727,7 +736,6 @@ fun MainWeatherScreen(
             }
         )
 
-        // Timer that ticks every 1 second continuously without pausing
         var currentTickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
         LaunchedEffect(Unit) {
             while(true) {
@@ -736,7 +744,6 @@ fun MainWeatherScreen(
             }
         }
 
-        // derivedStateOf guarantees ONLY the Text widget updates each second without lagging the screen
         val updateText by remember(data.lastUpdatedMs, settings.provider, settings.headerType, data.location) {
             derivedStateOf {
                 val providerName = settings.provider.lowercase()
@@ -778,11 +785,9 @@ fun AnimatedOdometerText(
     snapTo: Int? = null,
     animationEnabled: Boolean = true
 ) {
-    // If temp is null, fallback to "00"
     val textStr = temp?.toString() ?: "00"
     val snapStr = snapTo?.toString()
     
-    // Pad strings with '0' instead of empty spaces
     val maxLength = max(textStr.length, snapStr?.length ?: 0).coerceAtLeast(2)
     val paddedText = textStr.padStart(maxLength, '0')
     val paddedSnap = snapStr?.padStart(maxLength, '0')
@@ -929,19 +934,52 @@ private fun DigitColumn(
 //────────────────────────────────────────────────────────────────────────────
 
 private fun getSkyColors(weather: WeatherType, state: VisualState): Pair<Color, Color> {
+    // Overhauled with realistic, desaturated atmospheric scattering colors
     return when (state) {
-        VisualState.Sunrise -> when (weather) { WeatherType.Clear -> Color(0xFFFF5F6D) to Color(0xFFFFC371); WeatherType.Clouds -> Color(0xFFE0EAFC) to Color(0xFFCFDEF3); else -> Color(0xFF3E5151) to Color(0xFFDECBA4) }
-        VisualState.Day -> when (weather) { WeatherType.Clear -> Color(0xFF2980B9) to Color(0xFF6DD5FA); WeatherType.Clouds -> Color(0xFF757F9A) to Color(0xFFD7DDE8); WeatherType.Rain -> Color(0xFF203A43) to Color(0xFF2C5364); else -> Color(0xFFBDC3C7) to Color(0xFF2C3E50) }
-        VisualState.Afternoon -> when (weather) { WeatherType.Clear -> Color(0xFF4CA1AF) to Color(0xFFC4E0E5); else -> Color(0xFF304352) to Color(0xFFD7D2CC) }
-        VisualState.Sunset -> when (weather) { WeatherType.Clear -> Color(0xFF41295a) to Color(0xFF2F0743); WeatherType.Clouds -> Color(0xFF1c92d2) to Color(0xFFf2fcfe); else -> Color(0xFF3a6186) to Color(0xFF89253e) }
-        VisualState.Evening -> when (weather) { WeatherType.Clear -> Color(0xFF232526) to Color(0xFF414345); else -> Color(0xFF141E30) to Color(0xFF243B55) }
-        VisualState.Night -> when (weather) { WeatherType.Clear -> Color(0xFF0D0D0D) to Color(0xFF000000); else -> Color(0xFF141E30) to Color(0xFF000000) }
-        else -> Color(0xFF2980B9) to Color(0xFF6DD5FA)
+        VisualState.Sunrise -> when (weather) {
+            WeatherType.Clear -> Color(0xFF6B728E) to Color(0xFFD6A587)
+            WeatherType.Clouds -> Color(0xFF5C6479) to Color(0xFFA6968B)
+            else -> Color(0xFF4A4E5B) to Color(0xFF7A736E)
+        }
+        VisualState.Day -> when (weather) {
+            WeatherType.Clear -> Color(0xFF4B6E94) to Color(0xFF90B4CE) // Realistic sky blue
+            WeatherType.Clouds -> Color(0xFF6C7A89) to Color(0xFF95A5A6)
+            WeatherType.Rain, WeatherType.Drizzle -> Color(0xFF4C5B66) to Color(0xFF6E7D88)
+            WeatherType.Thunderstorm -> Color(0xFF34414A) to Color(0xFF4B5A66)
+            else -> Color(0xFF7A8B99) to Color(0xFFA5B1BB)
+        }
+        VisualState.Afternoon -> when (weather) {
+            WeatherType.Clear -> Color(0xFF3A5A80) to Color(0xFF8BA9C4)
+            else -> Color(0xFF5D6D7E) to Color(0xFF85929E)
+        }
+        VisualState.Sunset -> when (weather) {
+            WeatherType.Clear -> Color(0xFF384166) to Color(0xFFB57064)
+            WeatherType.Clouds -> Color(0xFF3E4357) to Color(0xFF876A68) // Fixes bright cyan bug
+            else -> Color(0xFF2C3242) to Color(0xFF5C4A4D)
+        }
+        VisualState.Evening -> when (weather) {
+            WeatherType.Clear -> Color(0xFF1B2336) to Color(0xFF323B52)
+            else -> Color(0xFF191E2B) to Color(0xFF2A313E)
+        }
+        VisualState.Night -> when (weather) {
+            WeatherType.Clear -> Color(0xFF0C101A) to Color(0xFF151B26)
+            else -> Color(0xFF0F121A) to Color(0xFF12151C)
+        }
+        else -> Color(0xFF4B6E94) to Color(0xFF90B4CE)
     }
 }
 
 private fun getCloudColor(weather: WeatherType, state: VisualState): Color {
-    return when (state) { VisualState.Sunrise -> Color(0xFFFFD194); VisualState.Day -> if (weather == WeatherType.Clear) Color(0xFFFFFFFF) else Color(0xFFF0F0F0); VisualState.Afternoon -> Color(0xFFE3F2FD); VisualState.Sunset -> Color(0xFFFF8A65); VisualState.Evening -> Color(0xFFB0BEC5); VisualState.Night -> Color(0xFF455A64); else -> Color.White }
+    // Matching clouds to the new desaturated lighting profiles
+    return when (state) {
+        VisualState.Sunrise -> Color(0xFFD8B9AD)
+        VisualState.Day -> if (weather == WeatherType.Clear) Color(0xFFE8ECEF) else Color(0xFFB0B9C2)
+        VisualState.Afternoon -> Color(0xFFD6DFE8)
+        VisualState.Sunset -> Color(0xFFA18281)
+        VisualState.Evening -> Color(0xFF535C6D)
+        VisualState.Night -> Color(0xFF2C3342)
+        else -> Color(0xFFE8ECEF)
+    }
 }
 
 private fun epochToTimeStr(epoch: Long): String { return java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault()).format(java.util.Date(epoch * 1000)) }
