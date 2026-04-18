@@ -66,10 +66,12 @@ fun GlassPillBackground(
             .onGloballyPositioned { position = it.positionInWindow() }
             .then(if (shape != null) Modifier.clip(shape) else Modifier)
             .graphicsLayer {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0f && settings.blur) {
-                    renderEffect = android.graphics.RenderEffect
-                        .createBlurEffect(blurRadius, blurRadius, android.graphics.Shader.TileMode.CLAMP)
-                        .asComposeRenderEffect()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurRadius > 0.5f && settings.blur) {
+                    renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                        blurRadius,
+                        blurRadius,
+                        android.graphics.Shader.TileMode.CLAMP
+                    ).asComposeRenderEffect()
                 }
                 clip = true
             }

@@ -23,7 +23,9 @@ object SettingsPersistence {
             put("debugRotateWindSpeed", settings.debugRotateWindSpeed)
             put("provider", settings.provider)
             put("locationBasedWeather", settings.locationBasedWeather)
+            put("preciseLocation", settings.preciseLocation)
             put("demoMode", settings.demoMode)
+            put("refreshIntervalSec", settings.refreshIntervalSec)
         }
         prefs.edit().putString(KEY_DATA, json.toString()).apply()
     }
@@ -48,7 +50,9 @@ object SettingsPersistence {
                 debugRotateWindSpeed = json.optBoolean("debugRotateWindSpeed", false),
                 provider = json.optString("provider", "OpenWeather"),
                 locationBasedWeather = json.optBoolean("locationBasedWeather", true),
-                demoMode = json.optBoolean("demoMode", false)
+                preciseLocation = json.optBoolean("preciseLocation", true),
+                demoMode = json.optBoolean("demoMode", false),
+                refreshIntervalSec = json.optInt("refreshIntervalSec", 30)
             )
         } catch (e: Exception) {
             AppSettings()

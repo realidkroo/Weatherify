@@ -69,6 +69,7 @@ data class WeatherData(
     val lon: Double?,
     val feelsLikeDesc: String,
     val lastUpdated: String,
+    val lastUpdatedMs: Long,
     val hourlyForecast: List<ForecastItem>,
     val dailyForecast: List<DailyForecastItem>
 ) {
@@ -90,6 +91,7 @@ data class WeatherData(
             lat = null, lon = null,
             feelsLikeDesc = "Loading...",
             lastUpdated = "Connecting...",
+            lastUpdatedMs = 0L,
             hourlyForecast = List(8) { ForecastItem("__", "__", WeatherType.Clear) },
             dailyForecast = List(10) { DailyForecastItem("__", "__", "__", WeatherType.Clear) }
         )
@@ -140,6 +142,7 @@ object WeatherCache {
             .put("lon", data.lon ?: 0.0)
             .put("feelsLikeDesc", data.feelsLikeDesc)
             .put("lastUpdated", data.lastUpdated)
+            .put("lastUpdatedMs", data.lastUpdatedMs)
             .put("hourly", hourlyArr)
             .put("daily", dailyArr)
 
@@ -195,6 +198,7 @@ object WeatherCache {
                 lon = json.getDouble("lon").takeIf { it != 0.0 },
                 feelsLikeDesc = json.getString("feelsLikeDesc"),
                 lastUpdated = json.getString("lastUpdated"),
+                lastUpdatedMs = json.optLong("lastUpdatedMs", 0L),
                 hourlyForecast = hourly,
                 dailyForecast = daily
             )
@@ -244,12 +248,13 @@ object WeatherBackend {
 
     private suspend fun fetchFromApi(query: String): WeatherData = coroutineScope {
         val timeFormat = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())
-        val updateTime = timeFormat.format(java.util.Date())
+        val lastUpdatedMs = System.currentTimeMillis()
+        val updateTime = timeFormat.format(java.util.Date(lastUpdatedMs))
 
         if (currentProvider == "BMKG") {
-            return@coroutineScope WeatherData.Default.copy(location = "Indonesia", description = "BMKG reports clouds", lastUpdated = updateTime)
+            return@coroutineScope WeatherData.Default.copy(location = "Indonesia", description = "BMKG reports clouds", lastUpdated = updateTime, lastUpdatedMs = lastUpdatedMs)
         } else if (currentProvider == "Google") {
-            return@coroutineScope WeatherData.Default.copy(location = "Mountain View", description = "Google Weather simulated", lastUpdated = updateTime)
+            return@coroutineScope WeatherData.Default.copy(location = "Mountain View", description = "Google Weather simulated", lastUpdated = updateTime, lastUpdatedMs = lastUpdatedMs)
         }
 
         try {
@@ -307,7 +312,7 @@ object WeatherBackend {
 
             val rainLast1h = currentJson.optJSONObject("rain")?.optDouble("1h", 0.0) ?: 0.0
 
-            // ── 5-day / 3-hour forecast (already fetched) ───────────────────
+            // ── 5-day / 3-hour forecast ───────────────────
             val forecastList = forecastDeferred.await().getJSONArray("list")
 
             val fmtIn = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
@@ -360,7 +365,7 @@ object WeatherBackend {
                 dayIdx++
             }
 
-            // ── Air Quality & UV (already fetched) ──────────────────────────
+            // ── Air Quality & UV ──────────────────────────
             val aqiValue = aqiDeferred.await()
             val aqiLabel = when (aqiValue) {
                 1 -> "Good AQI"
@@ -373,7 +378,7 @@ object WeatherBackend {
 
             val uvIndex = uvDeferred.await()
 
-            // ── Moon phase (approx from date, no OneCall required) ──────────
+            // ── Moon phase ──────────
             val moonPhase = approximateMoonPhase()
 
             // ── Feels-like description ──────────────────────────────────────
@@ -403,17 +408,16 @@ object WeatherBackend {
                 lat = lat, lon = lon,
                 feelsLikeDesc = feelsLikeDesc,
                 lastUpdated = updateTime,
+                lastUpdatedMs = lastUpdatedMs,
                 hourlyForecast = hourly,
                 dailyForecast = daily
             )
         } catch (e: Exception) {
-            WeatherData.Default.copy(location = "Jakarta", description = "Failed to load", lastUpdated = updateTime)
+            WeatherData.Default.copy(location = "Jakarta", description = "Failed to load", lastUpdated = updateTime, lastUpdatedMs = lastUpdatedMs)
         }
     }
 
     private fun approximateMoonPhase(): Double {
-        // Synodic period of moon: ~29.53 days
-        // Reference new moon: Jan 13, 2025 (approx)
         val referenceNewMoon = 1736726400000L // ms
         val synodicMs = 29.53 * 24 * 60 * 60 * 1000
         val now = System.currentTimeMillis()

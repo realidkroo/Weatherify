@@ -231,6 +231,24 @@ fun MainWeatherScreen(
         }
     }
 
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            onRefresh()
+        } else if (scrollOffset.floatValue < 0f) {
+            animate(
+                initialValue = scrollOffset.floatValue,
+                targetValue = 0f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+            ) { value, _ ->
+                scrollOffset.floatValue = value
+            }
+        }
+    }
+
+    LaunchedEffect(data.lastUpdatedMs) {
+        isRefreshing = false
+    }
+
     val smoothProgress = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         snapshotFlow { (scrollOffset.floatValue / 800f).coerceIn(0f, 1f) }
@@ -709,9 +727,32 @@ fun MainWeatherScreen(
             }
         )
 
-        val providerName = settings.provider.lowercase()
-        val cityInfoStr = if (settings.headerType == HeaderType.Standard) "" else "${data.location.lowercase()} - "
-        val updateText = "${cityInfoStr} Updated at ${data.lastUpdated} from $providerName"
+        // Timer that ticks every 1 second continuously without pausing
+        var currentTickMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+        LaunchedEffect(Unit) {
+            while(true) {
+                delay(1000)
+                currentTickMs = System.currentTimeMillis()
+            }
+        }
+
+        // derivedStateOf guarantees ONLY the Text widget updates each second without lagging the screen
+        val updateText by remember(data.lastUpdatedMs, settings.provider, settings.headerType, data.location) {
+            derivedStateOf {
+                val providerName = settings.provider.lowercase()
+                val cityInfoStr = if (settings.headerType == HeaderType.Standard) "" else "${data.location.lowercase()} - "
+                val elapsedSec = ((currentTickMs - data.lastUpdatedMs) / 1000).coerceAtLeast(0)
+                
+                val timeString = when {
+                    data.lastUpdatedMs == 0L -> "Connecting..."
+                    elapsedSec < 15 -> "Updated just now"
+                    elapsedSec < 60 -> "Updated $elapsedSec seconds ago"
+                    else -> "Updated at ${data.lastUpdated}"
+                }
+                
+                "${cityInfoStr}$timeString from $providerName"
+            }
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.wrapContentWidth().graphicsLayer {
             val prog = smoothProgress.value
@@ -737,15 +778,15 @@ fun AnimatedOdometerText(
     snapTo: Int? = null,
     animationEnabled: Boolean = true
 ) {
-    val textStr = temp?.toString() ?: "__"
+    // If temp is null, fallback to "00"
+    val textStr = temp?.toString() ?: "00"
     val snapStr = snapTo?.toString()
     
-    // Pad strings so the digits align properly based on place value
+    // Pad strings with '0' instead of empty spaces
     val maxLength = max(textStr.length, snapStr?.length ?: 0).coerceAtLeast(2)
-    val paddedText = textStr.padStart(maxLength, ' ')
-    val paddedSnap = snapStr?.padStart(maxLength, ' ')
+    val paddedText = textStr.padStart(maxLength, '0')
+    val paddedSnap = snapStr?.padStart(maxLength, '0')
 
-    // Masking modifier for the invisible fading at top and bottom
     val maskModifier = modifier.graphicsLayer {
         compositingStrategy = CompositingStrategy.Offscreen
     }.drawWithContent {
@@ -774,7 +815,6 @@ fun AnimatedOdometerText(
                 snapChar = snapChar,
                 style = style,
                 animationEnabled = animationEnabled,
-                // Left digit moves first => delay increases with index
                 delayMillis = index * 150 
             )
         }
@@ -792,7 +832,6 @@ private fun DigitColumn(
 ) {
     val textMeasurer = rememberTextMeasurer()
     
-    // Use a fixed width based on the widest digit (usually 0 or 8) to prevent horizontal jitter
     val charWidthPx = remember(style) {
         (0..9).maxOf { textMeasurer.measure(it.toString(), style).size.width }
     }
@@ -800,17 +839,15 @@ private fun DigitColumn(
         textMeasurer.measure("0", style).size.height.toFloat() 
     }
 
-    // Handle non-digit characters (like minus signs or spaces)
     if (!targetChar.isDigit()) {
         Box(
             modifier = Modifier.layout { measurable, constraints ->
                 val p = measurable.measure(constraints)
-                val w = if (targetChar == ' ') 0 else p.width
-                layout(w, p.height) { p.place(0, 0) }
+                layout(p.width, p.height) { p.place(0, 0) }
             },
             contentAlignment = Alignment.Center
         ) {
-            Text(if (targetChar == ' ') "" else targetChar.toString(), style = style)
+            Text(targetChar.toString(), style = style)
         }
         return
     }
@@ -830,13 +867,11 @@ private fun DigitColumn(
             val currentWrapped = if (currentMod < 0) currentMod + 10f else currentMod
             var diff = targetDigit - currentWrapped
             
-            // Spin via the shortest path (e.g., 9 -> 0 spins forward by 1 instead of backward by 9)
             if (diff > 5f) diff -= 10f
             if (diff < -5f) diff += 10f
             
             val finalTarget = anim.value + diff
             
-            // Unchanged digits won't trigger an animation!
             if (abs(anim.targetValue - finalTarget) > 0.01f) {
                 if (animationEnabled) {
                     delay(delayMillis.toLong())
@@ -852,13 +887,11 @@ private fun DigitColumn(
         modifier = Modifier.layout { measurable, constraints ->
             val placeable = measurable.measure(constraints)
             layout(charWidthPx, placeable.height) {
-                // Center the dynamic digit inside the stable column width
                 placeable.place((charWidthPx - placeable.width) / 2, 0)
             }
         },
         contentAlignment = Alignment.Center
     ) {
-        // Invisible structural placeholder
         Text("0", style = style, color = Color.Transparent)
 
         val currentValue = anim.value
@@ -873,7 +906,6 @@ private fun DigitColumn(
             val itemAlpha = (1f - (absOffset * 0.55f)).coerceIn(0f, 1f)
             val itemBlur = (absOffset * 10f).coerceIn(0f, 20f)
 
-            // Only render visible items for strict optimization
             if (itemAlpha > 0f) {
                 Text(
                     text = displayDigit.toString(),
@@ -894,8 +926,7 @@ private fun DigitColumn(
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
+//────────────────────────────────────────────────────────────────────────────
 
 private fun getSkyColors(weather: WeatherType, state: VisualState): Pair<Color, Color> {
     return when (state) {

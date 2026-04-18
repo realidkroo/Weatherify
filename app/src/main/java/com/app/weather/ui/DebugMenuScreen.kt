@@ -61,49 +61,45 @@ fun DebugMenuScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // ── Odometer Test Tool ────────────────────────────────────────────
-        var testFrom by remember { mutableIntStateOf(-1) }
+        var testFrom by remember { mutableIntStateOf(0) }
         var testTarget by remember { mutableIntStateOf(24) }
         var activeSnap by remember { mutableStateOf<Int?>(null) }
         var activeAnimate by remember { mutableStateOf(24) }
 
-        // When "From" changes, immediately snap the odometer
         LaunchedEffect(testFrom) {
             activeSnap = testFrom
             activeAnimate = testFrom
         }
         
-        // When "Target" changes, let it fly!
         LaunchedEffect(testTarget) {
             activeSnap = null
             activeAnimate = testTarget
         }
 
-        val numberOptions = remember { listOf("__") + (0..99).map { it.toString() } }
+        val numberOptions = remember { (0..99).map { it.toString() } }
 
         Box(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Color.White.copy(0.05f)).padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // The animated Odometer
                 AnimatedOdometerText(
-                    temp = if (activeAnimate == -1) null else activeAnimate,
-                    snapTo = activeSnap?.let { if (it == -1) -1 else it },
+                    temp = activeAnimate,
+                    snapTo = activeSnap,
                     style = TextStyle(fontSize = 72.sp, fontWeight = FontWeight.Bold, color = Color.White),
                     animationEnabled = true
                 )
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 
-                // The Two Controllers
                 Row(modifier = Modifier.fillMaxWidth().height(150.dp)) {
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("FROM", color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.height(8.dp))
                         WheelPicker(
                             options = numberOptions,
-                            selectedIndex = testFrom + 1,
-                            onIndexSelected = { testFrom = it - 1 }
+                            selectedIndex = testFrom,
+                            onIndexSelected = { testFrom = it }
                         )
                     }
                     Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -111,8 +107,8 @@ fun DebugMenuScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         WheelPicker(
                             options = numberOptions,
-                            selectedIndex = testTarget + 1,
-                            onIndexSelected = { testTarget = it - 1 }
+                            selectedIndex = testTarget,
+                            onIndexSelected = { testTarget = it }
                         )
                     }
                 }

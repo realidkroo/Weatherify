@@ -2,6 +2,7 @@ package com.app.weather.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -44,6 +45,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,8 +73,7 @@ fun OdometerOverlayContent(
     settings: AppSettings,
     onTest: (from: Int, target: Int) -> Unit
 ) {
-    // Index 0 represents "-", Indexes 1..10 represent "0".."9"
-    val digitOptions = remember { listOf("-") + (0..9).map { it.toString() } }
+    val digitOptions = remember { (0..9).map { it.toString() } }
     
     var fromTens by remember { mutableIntStateOf(0) }
     var fromOnes by remember { mutableIntStateOf(0) }
@@ -80,10 +81,8 @@ fun OdometerOverlayContent(
     var targetOnes by remember { mutableIntStateOf(0) }
 
     fun getVal(tens: Int, ones: Int): Int {
-        val tStr = if (tens == 0) "" else (tens - 1).toString()
-        val oStr = if (ones == 0) "" else (ones - 1).toString()
-        val combined = tStr + oStr
-        return combined.toIntOrNull() ?: -1 // Returns -1 when both are "-"
+        val combined = tens.toString() + ones.toString()
+        return combined.toIntOrNull() ?: 0
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -101,7 +100,6 @@ fun OdometerOverlayContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp))) {
-            // Highlight Box perfectly centered
             Box(modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.9f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)))
 
             Row(modifier = Modifier.fillMaxSize()) {
@@ -141,7 +139,6 @@ fun ExperimentalOverlayContent(
     val weatherTypes = WeatherType.entries.toTypedArray()
     val visualStates = VisualState.entries.toTypedArray()
 
-    // Default to the currently applied weather and time of day!
     var selectedWeather by remember { mutableIntStateOf(weatherTypes.indexOf(currentWeather).coerceAtLeast(0)) }
     var selectedVisual by remember { mutableIntStateOf(visualStates.indexOf(settings.visualStateOverride).coerceAtLeast(0)) }
 
@@ -301,7 +298,11 @@ fun SettingsScreen(
                             SettingsItemOverlay("Wind Speed unit", "Kilometers per hour ( Km/h )", Icons.Outlined.Air) {}
                             SettingsItemOverlay("Pressure Unit", "inches of mercury", Icons.Outlined.Compress) {}
                             SettingsItemOverlay("Visibility Unit", "Meters/kilometers", Icons.Outlined.Visibility) {}
+                            SettingsItemOverlay("Refresh cycle", "${settings.refreshIntervalSec / 60}m ${settings.refreshIntervalSec % 60}s", Icons.AutoMirrored.Outlined.RotateRight) { onOpenOverlay(OverlayType.RefreshCycle) }
                             SettingsSwitch("Location Based Weather", "display weather based on the location youre in using IP address or GPS. if disabled, the app will use default city.", Icons.Outlined.LocationOn, settings.locationBasedWeather) { onUpdateSettings(settings.copy(locationBasedWeather = it)) }
+                            androidx.compose.animation.AnimatedVisibility(visible = settings.locationBasedWeather) {
+                                SettingsSwitch("Precise Location", "Use high-accuracy GPS. may consume more battery.", Icons.Outlined.MyLocation, settings.preciseLocation) { onUpdateSettings(settings.copy(preciseLocation = it)) }
+                            }
                         }
                     }
                 }
@@ -392,13 +393,25 @@ fun SettingsScreen(
     val isMain = currentMenu == "Main"
     val headerProgress = (scrollOffset / 150f).coerceIn(0f, 1f)
     
+    // Liquid Header Variables
+    val iconX = (48f * headerProgress).dp
+    val iconY = (52f * (1f - headerProgress)).dp
+    val titleX = (if (isMain) 0f else 100f * headerProgress).dp
+    val titleY = (if (isMain) (44f * (1f - headerProgress)) else (96f * (1f - headerProgress) + 4f * headerProgress)).dp
     val titleScale = 1f - 0.4f * headerProgress
-    val titleX = (if (isMain) 0f else 84f * headerProgress).dp
-    val titleY = (if (isMain) (44f * (1f - headerProgress) - 8f * headerProgress) else (96f * (1f - headerProgress) - 4f * headerProgress)).dp
 
-    val iconX = (44f * headerProgress).dp
-    val iconY = (52f * (1f - headerProgress) + 4f * headerProgress).dp
-    val iconScale = 1f - 0.3f * headerProgress
+    val metaballModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Modifier.graphicsLayer {
+            val blur = android.graphics.RenderEffect.createBlurEffect(15f, 15f, android.graphics.Shader.TileMode.CLAMP)
+            val matrix = android.graphics.ColorMatrix(floatArrayOf(
+                1f, 0f, 0f, 0f, 0f,
+                0f, 1f, 0f, 0f, 0f,
+                0f, 0f, 1f, 0f, 0f,
+                0f, 0f, 0f, 50f, -5000f
+            ))
+            renderEffect = android.graphics.RenderEffect.createColorFilterEffect(android.graphics.ColorMatrixColorFilter(matrix), blur).asComposeRenderEffect()
+        }
+    } else Modifier
 
     Box(modifier = Modifier.fillMaxSize().background(bgColor)) {
         val internalGlassState = remember { GlassState() }
@@ -424,54 +437,58 @@ fun SettingsScreen(
                 val bgScrollOffset = if (bgScrollState.firstVisibleItemIndex == 0) bgScrollState.firstVisibleItemScrollOffset.toFloat() else 150f
                 val bgHeaderProgress = (bgScrollOffset / 150f).coerceIn(0f, 1f)
                 
+                val bgMenuIcon = when (swipeBgMenu) { "General" -> Icons.Outlined.Settings; "Appearance" -> Icons.Outlined.Palette; "DebugMenu" -> Icons.Outlined.BugReport; else -> null }
+                val bgIconX = (48f * bgHeaderProgress).dp
+                val bgIconY = (52f * (1f - bgHeaderProgress)).dp
+                val bgTitleX = (if (bgIsMain) 0f else 100f * bgHeaderProgress).dp
+                val bgTitleY = (if (bgIsMain) (44f * (1f - bgHeaderProgress)) else (96f * (1f - bgHeaderProgress) + 4f * bgHeaderProgress)).dp
                 val bgTitleScale = 1f - 0.4f * bgHeaderProgress
-                val bgTitleX = (if (bgIsMain) 0f else 84f * bgHeaderProgress).dp
-                val bgTitleY = (if (bgIsMain) (44f * (1f - bgHeaderProgress) - 8f * bgHeaderProgress) else (96f * (1f - bgHeaderProgress) - 4f * bgHeaderProgress)).dp
-
-                val bgIconX = (44f * bgHeaderProgress).dp
-                val bgIconY = (52f * (1f - bgHeaderProgress) + 4f * bgHeaderProgress).dp
-                val bgIconScale = 1f - 0.3f * bgHeaderProgress
 
                 Box(modifier = Modifier.fillMaxWidth().height(bgHeaderHeight.dp).clipToBounds()) {
                     if (settings.blur) {
                         Column(modifier = Modifier.fillMaxSize()) {
-                            GlassPillBackground(state = internalBgGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.3f).dp))
-                            GlassPillBackground(state = internalBgGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.35f).dp))
-                            GlassPillBackground(state = internalBgGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.35f).dp))
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.2f).dp))
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.15f).dp))
+                            GlassPillBackground(state = internalBgGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height((bgHeaderHeight * 0.1f).dp))
                         }
                     }
                     Box(modifier = Modifier.fillMaxSize().background(
                         androidx.compose.ui.graphics.Brush.verticalGradient(
                             0f to bgColor.copy(alpha = if (settings.blur) 0.95f else 0.95f),
-                            0.5f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
-                            0.8f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
-                            1f to Color.Transparent
+                            0.15f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
+                            0.4f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
+                            0.6f to Color.Transparent
                         )
                     ))
                     Box(modifier = Modifier.matchParentSize().padding(top = 56.dp, start = 24.dp, end = 24.dp)) {
                         
-                        val menuIcon = when (swipeBgMenu) {
-                            "General" -> Icons.Outlined.Settings
-                            "Appearance" -> Icons.Outlined.Palette
-                            "DebugMenu" -> Icons.Outlined.BugReport
-                            else -> null
-                        }
-                        
-                        if (menuIcon != null) {
-                            Icon(
-                                imageVector = menuIcon,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .graphicsLayer {
-                                        translationX = bgIconX.toPx()
-                                        translationY = bgIconY.toPx()
-                                        scaleX = bgIconScale
-                                        scaleY = bgIconScale
-                                        transformOrigin = TransformOrigin(0f, 0f)
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = swipeBgMenu != "Main",
+                            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                            exit = fadeOut() + scaleOut(targetScale = 0.8f)
+                        ) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                // Metaball Layer
+                                Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.15f }.then(metaballModifier)) {
+                                    Box(modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.onBackground, CircleShape))
+                                    if (bgMenuIcon != null) {
+                                        Box(modifier = Modifier.graphicsLayer { translationX = bgIconX.toPx(); translationY = bgIconY.toPx(); alpha = bgHeaderProgress }.size(36.dp).background(MaterialTheme.colorScheme.onBackground, CircleShape))
                                     }
-                            )
+                                }
+
+                                // Icons overlay
+                                Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+                                }
+
+                                Box(modifier = Modifier.graphicsLayer { translationX = 42.dp.toPx(); translationY = 8.dp.toPx(); alpha = ((bgHeaderProgress - 0.7f) * 3.33f).coerceIn(0f, 1f) }.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)))
+                                
+                                if (bgMenuIcon != null) {
+                                    Box(modifier = Modifier.graphicsLayer { translationX = bgIconX.toPx(); translationY = bgIconY.toPx() }.size(36.dp), contentAlignment = Alignment.Center) {
+                                        Icon(bgMenuIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            }
                         }
 
                         Text(
@@ -572,43 +589,22 @@ fun SettingsScreen(
                     Box(modifier = Modifier.fillMaxSize().graphicsLayer(alpha = 0.99f)) {
                         Column(modifier = Modifier.fillMaxSize()) {
                             val h = if (isMain) 150f else 210f
-                            GlassPillBackground(state = internalGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((h * 0.3f).dp))
-                            GlassPillBackground(state = internalGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((h * 0.35f).dp))
-                            GlassPillBackground(state = internalGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height((h * 0.35f).dp))
+                            GlassPillBackground(state = internalGlassState, blurRadius = 25f, modifier = Modifier.fillMaxWidth().height((h * 0.2f).dp))
+                            GlassPillBackground(state = internalGlassState, blurRadius = 10f, modifier = Modifier.fillMaxWidth().height((h * 0.15f).dp))
+                            GlassPillBackground(state = internalGlassState, blurRadius = 5f, modifier = Modifier.fillMaxWidth().height((h * 0.1f).dp))
                         }
                     }
                 }
                 Box(modifier = Modifier.fillMaxSize().background(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
                         0f to bgColor.copy(alpha = if (settings.blur) 0.95f else 0.95f),
-                        0.5f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
-                        0.8f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
-                        1f to Color.Transparent
+                        0.15f to bgColor.copy(alpha = if (settings.blur) 0.90f else 0.90f),
+                        0.4f to bgColor.copy(alpha = if (settings.blur) 0.40f else 0.8f),
+                        0.6f to Color.Transparent
                     )
                 ))
 
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .padding(top = 56.dp, start = 24.dp, end = 24.dp)
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = currentMenu != "Main",
-                        enter = fadeIn() + scaleIn(initialScale = 0.7f),
-                        exit = fadeOut() + scaleOut(targetScale = 0.7f),
-                        modifier = Modifier.align(Alignment.TopStart)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.1f))
-                                .clickable { handleBack(SubNavType.Pop) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
-                        }
-                    }
+                Box(modifier = Modifier.matchParentSize().padding(top = 56.dp, start = 24.dp, end = 24.dp)) {
                     
                     val menuIcon = when (currentMenu) {
                         "General" -> Icons.Outlined.Settings
@@ -617,21 +613,33 @@ fun SettingsScreen(
                         else -> null
                     }
 
-                    if (menuIcon != null) {
-                        Icon(
-                            imageVector = menuIcon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier
-                                .size(36.dp)
-                                .graphicsLayer {
-                                    translationX = iconX.toPx()
-                                    translationY = iconY.toPx()
-                                    scaleX = iconScale
-                                    scaleY = iconScale
-                                    transformOrigin = TransformOrigin(0f, 0f)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = currentMenu != "Main",
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            // Metaball Liquid Layer
+                            Box(modifier = Modifier.fillMaxSize().graphicsLayer { alpha = 0.15f }.then(metaballModifier)) {
+                                Box(modifier = Modifier.size(36.dp).background(MaterialTheme.colorScheme.onBackground, CircleShape))
+                                if (menuIcon != null) {
+                                    Box(modifier = Modifier.graphicsLayer { translationX = iconX.toPx(); translationY = iconY.toPx(); alpha = headerProgress }.size(36.dp).background(MaterialTheme.colorScheme.onBackground, CircleShape))
                                 }
-                        )
+                            }
+
+                            // Foreground Icons Overlay
+                            Box(modifier = Modifier.size(36.dp).clip(CircleShape).clickable { handleBack(SubNavType.Pop) }, contentAlignment = Alignment.Center) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Back", tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(24.dp))
+                            }
+
+                            Box(modifier = Modifier.graphicsLayer { translationX = 42.dp.toPx(); translationY = 8.dp.toPx(); alpha = ((headerProgress - 0.7f) * 3.33f).coerceIn(0f, 1f) }.width(1.dp).height(20.dp).background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)))
+                            
+                            if (menuIcon != null) {
+                                Box(modifier = Modifier.graphicsLayer { translationX = iconX.toPx(); translationY = iconY.toPx() }.size(36.dp), contentAlignment = Alignment.Center) {
+                                    Icon(menuIcon, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                        }
                     }
 
                     key(navType) {
@@ -654,12 +662,7 @@ fun SettingsScreen(
                                 }
                             }
                         ) { title ->
-                            Text(
-                                text = title,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                fontSize = 40.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(text = title, color = MaterialTheme.colorScheme.onBackground, fontSize = 40.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -794,7 +797,7 @@ fun HeaderTypeSelectionContent(settings: AppSettings, onSelect: (HeaderType) -> 
 fun OverlayContent(
     overlayType: OverlayType, 
     settings: AppSettings, 
-    currentWeather: WeatherType = WeatherType.Clear, // <-- Added default param here
+    currentWeather: WeatherType = WeatherType.Clear,
     onUpdateSettings: (AppSettings) -> Unit, 
     onOpenNested: (NestedOverlay) -> Unit,
     onWeatherSelect: (WeatherType) -> Unit = {},
@@ -1068,9 +1071,77 @@ fun OverlayContent(
                         WeatherBackend.setProvider("Google")
                     }
                 }
+                OverlayType.RefreshCycle -> RefreshCycleOverlayContent(settings, onUpdateSettings)
                 OverlayType.None -> {}
             }
         }
+    }
+}
+
+@Composable
+fun RefreshCycleOverlayContent(
+    settings: AppSettings,
+    onUpdate: (AppSettings) -> Unit
+) {
+    val minuteOptions = remember { (0..59).map { "${it}m" } }
+    
+    var selectedMinute by remember { mutableIntStateOf(settings.refreshIntervalSec / 60) }
+    var selectedSecond by remember { mutableIntStateOf(settings.refreshIntervalSec % 60) }
+
+    val secondOptions = remember(selectedMinute) {
+        if (selectedMinute == 0) (30..59).map { "${it}s" }
+        else (0..59).map { "${it}s" }
+    }
+
+    LaunchedEffect(selectedMinute) {
+        if (selectedMinute == 0 && selectedSecond < 30) {
+            selectedSecond = 30
+        }
+    }
+
+    LaunchedEffect(selectedMinute, selectedSecond) {
+        val totalSec = if (selectedMinute == 0) {
+            selectedSecond.coerceIn(30, 59)
+        } else {
+            selectedMinute * 60 + selectedSecond
+        }
+        if (totalSec != settings.refreshIntervalSec) {
+            onUpdate(settings.copy(refreshIntervalSec = totalSec))
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.AutoMirrored.Outlined.RotateRight, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp).padding(bottom = 12.dp))
+        Text("Refresh Cycle", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+        Text("Set how often the weather data refreshes in the background. Min 30s.", color = Color.White.copy(alpha = 0.5f), fontSize = 14.sp)
+        
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Row(modifier = Modifier.fillMaxWidth()) {
+            Text("MINUTES", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("SECONDS", modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = Color.White.copy(alpha = 0.5f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp))) {
+            Box(modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.9f).height(42.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.08f)))
+
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f)) {
+                    WheelPicker(options = minuteOptions, selectedIndex = selectedMinute, onIndexSelected = { selectedMinute = it })
+                }
+                Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).align(Alignment.CenterVertically).background(Color.White.copy(alpha = 0.1f)))
+                Box(modifier = Modifier.weight(1f)) {
+                    val displayIndex = if (selectedMinute == 0) (selectedSecond - 30).coerceAtLeast(0) else selectedSecond
+                    WheelPicker(options = secondOptions, selectedIndex = displayIndex, onIndexSelected = { 
+                        selectedSecond = if (selectedMinute == 0) it + 30 else it
+                    })
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 

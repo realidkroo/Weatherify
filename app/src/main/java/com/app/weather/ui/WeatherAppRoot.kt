@@ -39,6 +39,7 @@ import com.app.weather.ui.theme.WeatherAppTheme
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -47,7 +48,7 @@ enum class AppTheme { Light, Dark, Auto }
 enum class QuoteStyle { Compact, Summary }
 enum class HeaderType { Greeting, FeelsLike, Sunrise, Disabled, Standard }
 enum class AppIcon { Day, NightFullMoon, NightMoon }
-enum class OverlayType { None, Theme, Quote, Header, Icons, Permissions, Credits, Provider, Experimental, Odometer }
+enum class OverlayType { None, Theme, Quote, Header, Icons, Permissions, Credits, Provider, Experimental, Odometer, RefreshCycle }
 enum class NestedOverlay { None, HeaderTypeSelection }
 enum class NavType { Tab, Push, Pop, Instant }
 
@@ -75,8 +76,10 @@ data class AppSettings(
     val debugRotateWindSpeed: Boolean = false,
     val provider:     String     = "OpenWeather",
     val locationBasedWeather: Boolean = true,
+    val preciseLocation: Boolean = true,
     val demoMode:     Boolean    = false,
-    val visualStateOverride: VisualState = VisualState.Automatic
+    val visualStateOverride: VisualState = VisualState.Automatic,
+    val refreshIntervalSec: Int = 30
 )
 
 val LocalAppSettings = compositionLocalOf { AppSettings() }
@@ -149,7 +152,8 @@ fun WeatherAppRoot() {
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         ) {
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+            val priority = if (settings.preciseLocation) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+            fusedLocationClient.getCurrentLocation(priority, null)
                 .addOnSuccessListener { loc ->
                     if (loc != null) loadWeatherForLocation(loc.latitude, loc.longitude)
                     else loadWeatherForLocation(null, null)
@@ -169,6 +173,7 @@ fun WeatherAppRoot() {
                 wind = "12 km/h",
                 rainProb = "Low",
                 lastUpdated = "Just now",
+                lastUpdatedMs = System.currentTimeMillis(),
                 type = WeatherType.Clear
             )
             return
@@ -179,8 +184,9 @@ fun WeatherAppRoot() {
                     Manifest.permission.ACCESS_COARSE_LOCATION
                 ) == PackageManager.PERMISSION_GRANTED
             ) {
+                val priority = if (settings.preciseLocation) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
                 fusedLocationClient.getCurrentLocation(
-                    Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                    priority,
                     null
                 )
                     .addOnSuccessListener { loc ->
@@ -206,6 +212,14 @@ fun WeatherAppRoot() {
         settings.demoMode,
         settings.provider
     ) { refreshWeather() }
+
+    LaunchedEffect(settings.refreshIntervalSec) {
+        while(isActive) {
+            val delaySecs = settings.refreshIntervalSec.coerceAtLeast(5)
+            delay(delaySecs * 1000L)
+            refreshWeather()
+        }
+    }
 
     val dynamicBarBg by animateColorAsState(
         targetValue = if (currentDestination != Destination.Weather) {
